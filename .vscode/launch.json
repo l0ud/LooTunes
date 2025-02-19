@@ -1,0 +1,30 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Cortex Debug",
+            "cwd": "${workspaceFolder}",
+            "executable": "${workspaceFolder}/build/puya_playground.out",
+            "request": "launch",
+            "type": "cortex-debug",
+            //"breakAfterReset": true,
+            "runToEntryPoint": "main",
+            "servertype": "openocd",
+            "configFiles": [
+                "openocd.cfg"
+            ],
+        },
+        {
+            "name": "pyOCD",
+            "cwd": "${workspaceFolder}",
+            "type": "cortex-debug",
+            "request": "launch",
+            "executable": "${workspaceFolder}/build/puya_playground.out",
+            "servertype": "pyocd",
+            "targetId": "PY32F030x6", 
+            "svdFile": "CMSIS/Device/PY32F0xx/py32f030xx.svd",
+            "svdPath": "CMSIS/Device/PY32F0xx/py32f030xx.svd",
+            "showDevDebugOutput":"none",
+        },
+    ]
+}

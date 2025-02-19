@@ -1,0 +1,6 @@
+[
+{
+    "name": "Arm toolchain",
+    "toolchainFile": "arm-none-eabi-gcc.cmake"
+}
+]
