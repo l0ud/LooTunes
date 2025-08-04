@@ -1,12 +1,43 @@
-#include "py32f0xx.h"
-#include "py32f0xx_hal.h"
-#include <stdbool.h>
-#include <stdlib.h>
+#pragma once
 
-#define LCD_BLK_PIN GPIO_PIN_0 // GPIOA
-#define LCD_SCK_PIN GPIO_PIN_1 // GPIOA
-#define LCD_MOSI_PIN GPIO_PIN_12 // GPIOA
-#define LCD_DC_PIN GPIO_PIN_6 // GPIOA
+#include <cstdint>
 
-#define LCD_CS_PIN GPIO_PIN_0 //GPIOB
-#define LCD_RES_PIN GPIO_PIN_1 //GPIOB
+class Config {
+public:
+    // Enumerations for specific configuration parameters with uint8_t underlying type
+    enum class LightMode : uint8_t {
+        Disabled = 0,
+        Normal = 1,
+        Reversed = 2
+    };
+
+    enum class UsbMode : uint8_t {
+        AlwaysOff = 0,
+        AlwaysOn = 1,
+        OnPlayback = 2
+    };
+
+    // Constructor
+    Config();
+
+    // Configuration parameters
+    uint8_t random_min;         // Minimum random hops
+    uint8_t random_max;         // Maximum random hops
+
+    LightMode light_mode;       // Light mode
+    uint16_t on_treshold;        // Light threshold to power on (normal mode)
+    uint16_t off_treshold;       // Light threshold to power off (normal mode)
+
+    UsbMode usb_mode;           // USB power mode
+
+    uint8_t fade_in;            // Fade-in step time in ms
+    uint8_t fade_out;           // Fade-out step time in ms
+
+    // Load configuration from file
+    __attribute__((noinline)) bool load_from_file(const char* filename);
+
+private:
+    // Optional: helper methods for parsing
+};
+
+extern Config CFG;

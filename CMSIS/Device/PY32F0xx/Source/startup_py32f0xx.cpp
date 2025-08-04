@@ -26,7 +26,8 @@ extern "C" {
 
 /* Includes ----------------------------------------------------------------------*/
 extern "C" {
-  void WEAK Reset_Handler(void);            // Address = 0x0000_0004
+  void WEAK Pre_Reset_Handler(void);            // Address = 0x0000_0004
+  void Reset_Handler(void);            // Address = 0x0000_0004
 }
 void WEAK NMI_Handler(void);              // Address = 0x0000_0008
 void WEAK HardFault_Handler(void);        // Address = 0x0000_000C
@@ -92,7 +93,7 @@ extern "C" void Default_Handler(void)
   }
 }
 
-extern int main(void);
+extern int main(void);  
 
 /******************************************************************************
 *
@@ -107,7 +108,7 @@ __attribute__ ((section(".isr_vector")))
 void (* const g_pfnVectors[])(void) __attribute__((used)) =
 {
   (void(*)(void))&_estack,    /* Top of stack address */
-  Reset_Handler,              /* Reset Handler */
+  Pre_Reset_Handler,              /* Reset Handler */
   NMI_Handler,                /* NMI Handler */
   HardFault_Handler,          /* Hard Fault Handler */
   0,                          /* Reserved */
@@ -177,6 +178,8 @@ void (* const g_pfnVectors[])(void) __attribute__((used)) =
  * @retval : None
 */
 
+extern "C" void __libc_init_array(void);
+
 void Reset_Handler(void)
 {
     register unsigned long *pulSrc, *pulDest;
@@ -208,6 +211,8 @@ void Reset_Handler(void)
     {
         *(pulDest++) = 0;
     }
+
+    __libc_init_array();
 
     // Call the application's entry point.
     main();
@@ -248,4 +253,3 @@ void Reset_Handler(void)
 #pragma weak SPI1_IRQHandler = Default_Handler
 #pragma weak USART1_IRQHandler = Default_Handler
 #pragma weak USART2_IRQHandler = Default_Handler
-

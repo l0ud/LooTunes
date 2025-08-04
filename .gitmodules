@@ -1,0 +1,3 @@
+[submodule "libsbc"]
+	path = libsbc
+	url = https://github.com/google/libsbc.git

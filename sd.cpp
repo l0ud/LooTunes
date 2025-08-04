@@ -1,9 +1,119 @@
 #include "sd.h"
 #include "spi.h"
 
-#include "lcd.h"
-
 #include <algorithm>
+
+extern "C" {
+    #include "petitfat/source/diskio.h"
+}
+
+
+
+/*-----------------------------------------------------------------------*/
+/* Initialize Disk Drive                                                 */
+/*-----------------------------------------------------------------------*/
+DSTATUS disk_initialize (void)
+{
+	if (SD::init()) {
+        SPI::speed_mode(true); // fast SPI
+        return RES_OK;
+    }
+
+    return RES_ERROR;
+}
+
+/*-----------------------------------------------------------------------*/
+/* Read Partial Sector                                                   */
+/*-----------------------------------------------------------------------*/
+
+
+uint8_t sectorCache[512];
+
+DWORD sectorCacheSector = 0xFFFFFFFF;
+
+DRESULT disk_readp (
+    BYTE* buff,		/* Pointer to the destination object */
+    DWORD sector,	/* Sector number (LBA) */
+    UINT offset,	/* Offset in the sector */
+    UINT count		/* Byte count (bit15:destination) */
+)
+{
+    DRESULT res = RES_ERROR;
+
+    // Check if the requested sector is already cached
+    if (sectorCacheSector != sector) {
+        SPI::begin();
+        SD::cs_set();
+        if (SD::send_command(17, sector, 0x01) == 0x00) { // CMD17 to read a single block
+            // Wait for data token (0xFE)
+            uint8_t token;
+            do {
+                token = SPI::raw_byte_read();
+            } while (token != 0xFE);
+
+            // Read the entire sector into the cache
+            SPI::raw_read(sectorCache, sizeof(sectorCache));
+
+            // Skip CRC bytes
+            SPI::raw_byte_read();
+            SPI::raw_byte_read();
+
+            // Update the cached sector number
+            sectorCacheSector = sector;
+
+            res = RES_OK;
+        }
+        SD::cs_reset();
+        SPI::end();
+    } else {
+        res = RES_OK; // Cache hit
+    }
+
+    // If the sector is cached, copy the requested bytes from the cache
+    if (res == RES_OK) {
+        //std::copy(sectorCache + offset, sectorCache + offset + count, buff);
+        // use raw loop
+        for (UINT i = 0; i < count; i++) {
+            buff[i] = sectorCache[offset + i];
+        }
+    }
+
+    return res;
+}
+
+/*-----------------------------------------------------------------------*/
+/* Write Partial Sector                                                  */
+/*-----------------------------------------------------------------------*/
+
+DRESULT disk_writep (
+	const BYTE* buff,		/* Pointer to the data to be written, NULL:Initiate/Finalize write operation */
+	DWORD sc		/* Sector number (LBA) or Number of bytes to send */
+)
+{
+	DRESULT res;
+
+
+	if (!buff) {
+		if (sc) {
+
+			// Initiate write process
+
+		} else {
+
+			// Finalize write process
+
+		}
+	} else {
+
+		// Send data to the disk
+
+	}
+
+	return res;
+}
+
+
+
 
 void SD::cs_set() {
     GPIOA->BSRR = GPIO_BSRR_BR4; // Set NSS low
@@ -27,7 +137,7 @@ uint8_t SD::send_command(uint8_t cmd, uint32_t arg, uint8_t crc) {
     // Wait for a response (response starts with 0 in the most significant bit)
     uint8_t response;
     for (int i = 0; i < 8; i++) { // Try up to 8 bytes
-        SPI::raw_read(&response, 1);
+        response = SPI::raw_byte_read();
         if ((response & 0x80) == 0) {
             break; // Response received
         }
@@ -130,57 +240,4 @@ bool SD::init() {
 
     // Initialization complete
     return true;
-}
-
-void SD::stream_sectors(uint32_t starting, uint32_t ending) {
-    SPI::dma_begin();
-    SPI::begin();
-    cs_set();
-    SPI::raw_byte_read(); // some cards apparently need it?
-
-    send_command(18, starting, 0x01); // CMD18, argument = starting sector, CRC ignored
-
-    //uint32_t full_frame = 170 * 320 * 2;
-
-    while(starting != ending) {
-
-        //uint32_t current_read = std::min((uint32_t)512, full_frame);
-        //full_frame -= current_read;
-
-        // read until start token
-        *(__IO uint8_t *)&SPI1->DR; // read data to empty recv fifo
-        *(__IO uint8_t *)&SPI1->DR; // read data to empty recv fifo
-        *(__IO uint8_t *)&SPI1->DR; // read data to empty recv fifo
-        *(__IO uint8_t *)&SPI1->DR; // read data to empty recv fifo
-
-        uint8_t token;
-        do {
-            //SPI::raw_read(&token, 1);
-            token = SPI::raw_byte_read();
-        } while (token != 0xFE);
-
-        LCD::listen();
-
-        /*
-        // read 512 bytes
-        uint8_t buffer[512];
-        SPI::raw_read(buffer, 512);
-        */
-
-        SPI::dma_clock_gen(512);
-        //SPI::raw_read(buffer, 512);
-        LCD::stop_listening();
-        // skip crc and wait for next start token
-        uint16_t crc;
-        SPI::raw_read(reinterpret_cast<uint8_t*>(&crc), sizeof(crc));
-        ++starting;
-    }
-
-    // send CMD12 to stop transmission
-    send_command(12, 0, 0x01);
-
-    cs_reset();
-
-    SPI::end();
-    SPI::dma_end();
 }

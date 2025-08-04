@@ -7,4 +7,4 @@
 
 
 #define INPUT_FREQUENCY 48000000
-#define VERSION "FxAIR v0.1"
+#define VERSION "FxLooTunes v0.1"

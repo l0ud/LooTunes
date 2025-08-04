@@ -1,14 +1,10 @@
 #pragma once
 
 extern "C" {
+#include "defines.h"
 #include "py32f0xx.h"
 #include "py32f0xx_hal.h"
-
-#include "config.h"
 }
-//#define LCD_MOSI_PIN GPIO_PIN_12 // GPIOA
-//#define LCD_DC_PIN GPIO_PIN_6 // GPIOA
-
 static uint8_t DMADummy = 0xff;
 
 class SPI {
@@ -16,52 +12,40 @@ public:
     static void init()
     {
         // pinout
-        //PA0 = SPI1_MISO
-        //PA1 = SPI1_MOSI
-        //PA2 = SPI1_SCK
+        // PA0 = SPI1_MISO (AF10)
+        // PA1 = SPI1_SCK  (AF0)
+        // PA2 = SPI1_MOSI (AF0)
 
-
-        // switch GPIO to alternate mode
-        
         // MISO - alternate mode
-        GPIOA->MODER &= ~GPIO_MODER_MODE0_Msk;  
+        GPIOA->MODER &= ~GPIO_MODER_MODE0_Msk;
         GPIOA->MODER |= GPIO_MODER_MODE0_1; // alternate mode
         GPIOA->OSPEEDR &= ~GPIO_OSPEEDR_OSPEED0_Msk;
         GPIOA->OSPEEDR |= GPIO_OSPEEDR_OSPEED0_1 | GPIO_OSPEEDR_OSPEED0_0; // very high speed
-        GPIOA->AFR[0] |= (10 << GPIO_AFRL_AFSEL0_Pos); // SPI1_MISO
-        // mosi - alternate mode
+        GPIOA->AFR[0] &= ~GPIO_AFRL_AFSEL0_Msk;
+        GPIOA->AFR[0] |= (10 << GPIO_AFRL_AFSEL0_Pos); // AF10 for SPI1_MISO
+
+        // SCK - alternate mode
         GPIOA->MODER &= ~GPIO_MODER_MODE1_Msk;
         GPIOA->MODER |= GPIO_MODER_MODE1_1; // alternate mode
         GPIOA->OSPEEDR &= ~GPIO_OSPEEDR_OSPEED1_Msk;
         GPIOA->OSPEEDR |= GPIO_OSPEEDR_OSPEED1_1 | GPIO_OSPEEDR_OSPEED1_0; // very high speed
-        GPIOA->AFR[0] |= (10 << GPIO_AFRL_AFSEL1_Pos); // SPI1_MOSI
-        // sck - alternate mode
+        GPIOA->AFR[0] &= ~GPIO_AFRL_AFSEL1_Msk;
+        GPIOA->AFR[0] |= (0 << GPIO_AFRL_AFSEL1_Pos); // AF0 for SPI1_SCK
+
+        // MOSI - alternate mode
         GPIOA->MODER &= ~GPIO_MODER_MODE2_Msk;
         GPIOA->MODER |= GPIO_MODER_MODE2_1; // alternate mode
         GPIOA->OSPEEDR &= ~GPIO_OSPEEDR_OSPEED2_Msk;
         GPIOA->OSPEEDR |= GPIO_OSPEEDR_OSPEED2_1 | GPIO_OSPEEDR_OSPEED2_0; // very high speed
-        GPIOA->AFR[0] |= (10 << GPIO_AFRL_AFSEL2_Pos); // SPI1_SCK
+        GPIOA->AFR[0] &= ~GPIO_AFRL_AFSEL2_Msk;
+        GPIOA->AFR[0] |= (0 << GPIO_AFRL_AFSEL2_Pos); // AF0 for SPI1_MOSI
 
-
-        // nss - alternate mode
-        /*
-        GPIOB->MODER &= ~GPIO_MODER_MODE0_Msk;
-        GPIOB->MODER |= GPIO_MODER_MODE0_1; // alternate mode
-        GPIOB->OSPEEDR &= ~GPIO_OSPEEDR_OSPEED0_Msk;
-        GPIOB->OSPEEDR |= GPIO_OSPEEDR_OSPEED0_1 | GPIO_OSPEEDR_OSPEED0_0; // very high speed
-        GPIOB->AFR[0] = (0 << GPIO_AFRL_AFSEL0_Pos); // SPI1_NSS
-        GPIOB->PUPDR |= GPIO_PUPDR_PUPD0_0; // pull-up
-        */
-
-        //GPIOA->MODER &= ~GPIO_MODER_MODE6_Msk;
-        //GPIOA->MODER |= GPIO_MODER_MODE6_0; // alternate mode
-        //GPIOA->MODER &= ~GPIO_MODER_MODE0_Msk;
-        //GPIOA->MODER |= GPIO_MODER_MODE0_0; // alternate mode
 
         // prepare SPI peripheral, needs to be call after gpio init
         //CPOL=0
         __HAL_RCC_SPI1_CLK_ENABLE();
-        __HAL_RCC_DMA_CLK_ENABLE();
+        // dma not used for now
+        //__HAL_RCC_DMA_CLK_ENABLE();
         __HAL_RCC_SYSCFG_CLK_ENABLE();
 
         // polarity clock 0 when idle, capture first edge (low to high), CPOL=0 and CPHA=0 so not setting them
@@ -111,11 +95,14 @@ public:
     {
         size_t iter = 0;
 
-        while (iter < len) {
+        // send dummy byte
+        *(__IO uint8_t *)&SPI1->DR = 0xff;
 
+        len -= 1;
+
+        while (iter < len) {
             // send dummy byte
             *(__IO uint8_t *)&SPI1->DR = 0xff;
-
 
             while(!(SPI1->SR & SPI_SR_RXNE)) { // rx empty
                 // wait to receive something
@@ -123,6 +110,13 @@ public:
 
             output[iter++] = *(__IO uint8_t *)&SPI1->DR; // read data
         }
+
+        // last 1 byte
+
+        while(!(SPI1->SR & SPI_SR_RXNE)) { // rx empty
+        }
+        output[iter++] = *(__IO uint8_t *)&SPI1->DR; // read data
+
 
         spi_wait_end();
 

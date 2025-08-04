@@ -7,8 +7,8 @@ set(CMAKE_C_STANDARD 99)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_C_EXTENSIONS OFF)
 
-
 set(PROJECT_FILES
+        CMSIS/Device/PY32F0xx/Source/pre_reset.s
         CMSIS/Device/PY32F0xx/Source/startup_py32f0xx.cpp
         CMSIS/Device/PY32F0xx/Source/system_py32f0xx.c
         CMSIS/Device/PY32F0xx/Source/syscalls.c
@@ -19,9 +19,16 @@ set(PROJECT_FILES
         HAL/src/py32f0xx_hal_tim.c
         HAL/src/py32f0xx_hal_tim_ex.c
         main.cpp
-        lcd.cpp
         sd.cpp
+        gpio.cpp
+        playback.cpp
         button.cpp
+        config.cpp
+        light_sensor.cpp
+        libsbc/src/sbc.c
+        libsbc/src/bits.c
+        petitfat/source/diskio.c
+        petitfat/source/pff.c
         CMSIS/Device/PY32F0xx/Include/py32f0xx.h
         CMSIS/Device/PY32F0xx/Include/system_py32f0xx.h
         )
@@ -72,4 +79,3 @@ add_custom_command(TARGET ${EXECUTABLE}
         POST_BUILD
         COMMAND arm-none-eabi-objcopy -O ihex ${EXECUTABLE} ${PROJECT_NAME}.hex
         COMMAND arm-none-eabi-objcopy -O binary ${EXECUTABLE} ${PROJECT_NAME}.bin)
-
