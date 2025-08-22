@@ -882,6 +882,45 @@ FRESULT pf_mount (
 	return FR_OK;
 }
 
+FRESULT pf_build_cluster_cache (
+	CLUST cluster,	/* Start cluster number */
+	DWORD fsize	/* File size */
+)
+{
+	FATFS *fs = FatFs;
+	// traverse through the cluster of the file and fill fs->fcrange
+	if (!fs) return FR_NOT_ENABLED;		/* Check file system */
+	if (cluster <= 1) ABORT(FR_DISK_ERR);
+
+	fs->fcurr_range = fs->fcrange;	/* Reset current cluster range */
+
+	CRANGE *range = fs->fcrange;
+	range->cluster = cluster; /* Set start cluster */
+	range->remaining = 1;
+	DWORD curr_size = fs->csize * 512; // first cluster is already there
+
+	while (curr_size < fsize) {	/* Traverse through the clusters */
+		cluster = get_fat(cluster);	/* Get next cluster */
+		if (cluster <= 1) ABORT(FR_DISK_ERR);
+		if (range->cluster + range->remaining == cluster) { /* Same cluster? */
+			range->remaining++;
+		} else { /* New cluster */
+			range++;
+			range->cluster = cluster; /* Set new cluster */
+			range->remaining = 1;
+		}
+
+		curr_size += fs->csize * 512;	/* Increment by cluster size */
+	}
+
+	// set the last cluster range to zero
+	range++;
+	range->cluster = 0;	/* Mark end of cluster ranges */
+	range->remaining = 0;	/* Mark end of cluster ranges */
+
+	return FR_OK;	/* Cluster cache built successfully */
+}
+
 /*-----------------------------------------------------------------------*/
 /* Open or Create a File                                                 */
 /*-----------------------------------------------------------------------*/
@@ -906,6 +945,7 @@ FRESULT pf_open (
 
 	fs->org_clust = get_clust(dir);		/* File start cluster */
 	fs->fsize = ld_dword(dir+DIR_FileSize);	/* File size */
+	pf_build_cluster_cache(fs->org_clust, fs->fsize);
 	fs->fptr = 0;						/* File pointer */
 	fs->flag = FA_OPENED;
 
@@ -948,6 +988,68 @@ FRESULT pf_read (
 				} else {
 					clst = get_fat(fs->curr_clust);
 				}
+				if (clst <= 1) ABORT(FR_DISK_ERR);
+				fs->curr_clust = clst;				/* Update current cluster */
+			}
+			sect = clust2sect(fs->curr_clust);		/* Get current sector */
+			if (!sect) ABORT(FR_DISK_ERR);
+			fs->dsect = sect + cs;
+		}
+		rcnt = 512 - (UINT)fs->fptr % 512;			/* Get partial sector data from sector buffer */
+		if (rcnt > btr) rcnt = btr;
+		dr = disk_readp(rbuff, fs->dsect, (UINT)fs->fptr % 512, rcnt);
+		if (dr) ABORT(FR_DISK_ERR);
+		fs->fptr += rcnt;							/* Advances file read pointer */
+		btr -= rcnt; *br += rcnt;					/* Update read counter */
+		if (rbuff) rbuff += rcnt;					/* Advances the data pointer if destination is memory */
+	}
+
+	return FR_OK;
+}
+CLUST pf_next_cached_cluster()
+{
+	FATFS *fs = FatFs;
+	CRANGE *range = fs->fcurr_range;
+
+	if (range->remaining) {
+		range->remaining--;
+		return range->cluster++;
+	}
+
+	range++;
+	if (!range->cluster) return 0;
+
+	fs->fcurr_range = range;
+	range->remaining--;
+	return range->cluster++;
+}
+
+FRESULT pf_read_cached (
+	void* buff,		/* Pointer to the read buffer (NULL:Forward data to the stream)*/
+	UINT btr,		/* Number of bytes to read */
+	UINT* br		/* Pointer to number of bytes read */
+)
+{
+	DRESULT dr;
+	CLUST clst;
+	DWORD sect, remain;
+	UINT rcnt;
+	BYTE cs, *rbuff = buff;
+	FATFS *fs = FatFs;
+
+
+	*br = 0;
+	if (!fs) return FR_NOT_ENABLED;		/* Check file system */
+	if (!(fs->flag & FA_OPENED)) return FR_NOT_OPENED;	/* Check if opened */
+
+	remain = fs->fsize - fs->fptr;
+	if (btr > remain) btr = (UINT)remain;			/* Truncate btr by remaining bytes */
+
+	while (btr)	{									/* Repeat until all data transferred */
+		if ((fs->fptr % 512) == 0) {				/* On the sector boundary? */
+			cs = (BYTE)(fs->fptr / 512 & (fs->csize - 1));	/* Sector offset in the cluster */
+			if (!cs) {								/* On the cluster boundary? */
+				clst = pf_next_cached_cluster();
 				if (clst <= 1) ABORT(FR_DISK_ERR);
 				fs->curr_clust = clst;				/* Update current cluster */
 			}

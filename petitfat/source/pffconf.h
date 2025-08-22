@@ -18,6 +18,7 @@
 #define PF_FS_FAT16		0	/* FAT16 */
 #define PF_FS_FAT32		1	/* FAT32 */
 
+#define PF_CLUSTER_RANGES 20 /* Size of cached cluster ranges for opened file */
 
 /*---------------------------------------------------------------------------/
 / Locale and Namespace Configurations

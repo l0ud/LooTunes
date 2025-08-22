@@ -55,6 +55,10 @@ typedef unsigned long	DWORD;	/* 32-bit unsigned integer */
 #define	CLUST	WORD
 #endif
 
+typedef struct {
+	CLUST cluster;   /* Starting / current cluster */
+	DWORD remaining; /* Remaining cluster count in this range */
+} CRANGE;
 
 /* File system object structure */
 
@@ -73,6 +77,8 @@ typedef struct {
 	CLUST	org_clust;	/* File start cluster */
 	CLUST	curr_clust;	/* File current cluster */
 	DWORD	dsect;		/* File current data sector */
+	CRANGE  fcrange[PF_CLUSTER_RANGES]; /* Cluster range of the current file */
+	CRANGE* fcurr_range; /* Current cluster range of the file */
 } FATFS;
 
 
@@ -121,6 +127,7 @@ typedef enum {
 FRESULT pf_mount (FATFS* fs);								/* Mount/Unmount a logical drive */
 FRESULT pf_open (const char* path);							/* Open a file */
 FRESULT pf_read (void* buff, UINT btr, UINT* br);			/* Read data from the open file */
+FRESULT pf_read_cached (void* buff, UINT btr, UINT* br);	/* Read data from the open file using cluster cache */
 FRESULT pf_write (const void* buff, UINT btw, UINT* bw);	/* Write data to the open file */
 FRESULT pf_lseek (DWORD ofs);								/* Move file pointer of the open file */
 FRESULT pf_opendir (DIR* dj, const char* path);				/* Open a directory */

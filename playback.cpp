@@ -21,7 +21,8 @@ extern "C" {
 
 namespace {
 
-    uint8_t data[2*SBC_MAX_SAMPLES*sizeof(int16_t)] = {0};
+    FATFS fs;
+    uint8_t data[SBC_MAX_SAMPLES*sizeof(int16_t)] = {0};
     int16_t pcml[CHANNEL_FULL_BUFFER] = {0};
     int16_t pcmr[CHANNEL_FULL_BUFFER] = {0};
 
@@ -136,7 +137,6 @@ void DMA1_Channel1_IRQHandler()
 
 void Controller::main() {
     init();
-    FATFS fs;
     FRESULT res;
 
     res = pf_mount(&fs);
@@ -195,7 +195,7 @@ void Controller::main() {
 
 inline __attribute__((always_inline)) UINT freadwrap(void* buff, UINT size) {
     UINT br;
-    FRESULT res = pf_read(buff, size, &br);
+    FRESULT res = pf_read_cached(buff, size, &br);
     if (res != FR_OK) {
         // Handle read error
         while(1) { };
