@@ -35,12 +35,12 @@ void GPIO::init() {
     GPIOB->OSPEEDR &= ~GPIO_OSPEEDR_OSPEED2_Msk;
     GPIOB->OSPEEDR |= GPIO_OSPEEDR_OSPEED2_0; // low speed (01)
 
-    // map PB3 to TIM1_CH2
+    // PB3 - TIM1_CH2 for audio
     GPIOB->MODER &= ~GPIO_MODER_MODE3_Msk;
     GPIOB->MODER |= GPIO_MODER_MODE3_1; // alternate mode
     GPIOB->AFR[0] |= (1 << GPIO_AFRL_AFSEL3_Pos); // AF1: TIM1_CH2
 
-    // map PB6 to TIM1_CH3
+    // PB6 - TIM1_CH3 for audio
     GPIOB->MODER &= ~GPIO_MODER_MODE6_Msk;
     GPIOB->MODER |= GPIO_MODER_MODE6_1; // alternate mode
     GPIOB->AFR[0] |= (1 << GPIO_AFRL_AFSEL6_Pos); // AF1: TIM1_CH3

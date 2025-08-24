@@ -29,8 +29,9 @@ DSTATUS disk_initialize (void)
 
 uint8_t sectorCache[512];
 
-DWORD sectorCacheSector = NO_SECTOR;
+DWORD sdCachedSector = NO_SECTOR;
 DWORD sdRequestedSector = NO_SECTOR;
+bool sdMultiTransfer = false;
 
 
 DRESULT sd_request_sector(DWORD sector) {
@@ -48,6 +49,38 @@ DRESULT sd_request_sector(DWORD sector) {
     return RES_OK;
 }
 
+DRESULT sd_start_sector_stream(DWORD starting_sector) {
+    SPI::begin();
+    SD::cs_set();
+    if (SD::send_command(18, starting_sector, 0x01) != 0x00) { // CMD18 to read multiple blocks
+        // command failed
+        SD::cs_reset();
+        SPI::end();
+        return RES_ERROR;
+    }
+
+    sdRequestedSector = starting_sector;
+    sdMultiTransfer = true;
+
+    return RES_OK;
+}
+
+DRESULT sd_stop_sector_stream() {
+    if (SD::send_command(12, 0, 0x01) != 0x00) { // CMD12 to stop transmission
+        // command failed
+        SD::cs_reset();
+        SPI::end();
+        return RES_ERROR;
+    }
+
+    sdRequestedSector = NO_SECTOR;
+    sdMultiTransfer = false;
+
+    SD::cs_reset();
+    SPI::end();
+    return RES_OK;
+}
+
 void sd_read_sector() {
     // Wait for data token (0xFE)
     uint8_t token;
@@ -61,24 +94,15 @@ void sd_read_sector() {
     // Skip CRC bytes
     SPI::raw_byte_read();
     SPI::raw_byte_read();
-    SD::cs_reset();
-    SPI::end();
-    sdRequestedSector = NO_SECTOR; // nothing is pending now
-}
 
-void sd_drop_sector() {
-    // Wait for data token (0xFE)
-    uint8_t token;
-    do {
-        token = SPI::raw_byte_read();
-    } while (token != 0xFE);
-    // Skip the entire sector
-    for (size_t i = 0; i < sizeof(sectorCache) + 2; i++) { // +2 for crc
-        SPI::raw_byte_read();
+    if (sdMultiTransfer) {
+        sdRequestedSector++;
     }
-    SD::cs_reset();
-    SPI::end();
-    sdRequestedSector = NO_SECTOR;
+    else {
+        SD::cs_reset();
+        SPI::end();
+        sdRequestedSector = NO_SECTOR;
+    }
 }
 
 DRESULT disk_readp_ex (
@@ -91,27 +115,37 @@ DRESULT disk_readp_ex (
 {
     DRESULT res = RES_ERROR;
 
-    if (sectorCacheSector == sector) {
+    if (sdCachedSector == sector) {
         res = RES_OK;
     }
     else if (sector == sdRequestedSector) {
         // already requested sector from sd card, wait and read it
         sd_read_sector();
-        sectorCacheSector = sector;
+        sdCachedSector = sector;
         res = RES_OK;
-
-    }
-    else if (sdRequestedSector != NO_SECTOR && sector != sdRequestedSector) {
-        // requested sector earlier but now we need different one, drop the earlier one
-        sd_drop_sector();
     }
 
-    if (res != RES_OK) {
+    if (sdRequestedSector != NO_SECTOR && next_sector != sdRequestedSector) {
+        // requested sector earlier but now we will need different one, stop transfer
+        if (sd_stop_sector_stream() != RES_OK) {
+            return RES_ERROR;
+        }
+    }
+
+    if (res != RES_OK) { // we don't have data yet
+
         // need to request the sector now and wait for it
-        res = sd_request_sector(sector);
+        if (next_sector == sector + 1) { // transfer needed
+            // request multi-sector read if we are going to read the next sector soon
+            res = sd_start_sector_stream(sector);
+        }
+        else {
+            res = sd_request_sector(sector);
+        }
+
         if (res == RES_OK) {
             sd_read_sector();
-            sectorCacheSector = sector;
+            sdCachedSector = sector;
         }
     }
 
@@ -120,9 +154,9 @@ DRESULT disk_readp_ex (
         std::copy(sectorCache + offset, sectorCache + offset + count, buff);
     }
 
-    if (sdRequestedSector == NO_SECTOR && next_sector != NO_SECTOR && next_sector != sectorCacheSector) {
-        // request next sector as pre-fetch
-        sd_request_sector(next_sector);
+    // at this point we have the correct sector, but we might want to pre-fetch the next one
+    if (sdRequestedSector == NO_SECTOR && next_sector != NO_SECTOR) {
+        sd_start_sector_stream(next_sector);
     }
 
     return res;
@@ -181,6 +215,10 @@ uint8_t SD::send_command(uint8_t cmd, uint32_t arg, uint8_t crc) {
     
     SPI::raw_write(command, sizeof(command));
     
+    if (cmd == 12) {
+        SPI::raw_byte_read(); // discard a stuff byte when sending CMD12
+    }
+
     // Wait for a response (response starts with 0 in the most significant bit)
     uint8_t response;
     for (int i = 0; i < 8; i++) { // Try up to 8 bytes
