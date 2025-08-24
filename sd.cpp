@@ -29,53 +29,100 @@ DSTATUS disk_initialize (void)
 
 uint8_t sectorCache[512];
 
-DWORD sectorCacheSector = 0xFFFFFFFF;
+DWORD sectorCacheSector = NO_SECTOR;
+DWORD sdRequestedSector = NO_SECTOR;
 
-DRESULT disk_readp (
+
+DRESULT sd_request_sector(DWORD sector) {
+    SPI::begin();
+    SD::cs_set();
+    if (SD::send_command(17, sector, 0x01) != 0x00) { // CMD17 to read a single block
+        // command failed
+        SD::cs_reset();
+        SPI::end();
+        return RES_ERROR;
+    }
+
+    sdRequestedSector = sector;
+
+    return RES_OK;
+}
+
+void sd_read_sector() {
+    // Wait for data token (0xFE)
+    uint8_t token;
+    do {
+        token = SPI::raw_byte_read();
+    } while (token != 0xFE);
+
+    // Read the entire sector into the cache
+    SPI::raw_read(sectorCache, sizeof(sectorCache));
+
+    // Skip CRC bytes
+    SPI::raw_byte_read();
+    SPI::raw_byte_read();
+    SD::cs_reset();
+    SPI::end();
+    sdRequestedSector = NO_SECTOR; // nothing is pending now
+}
+
+void sd_drop_sector() {
+    // Wait for data token (0xFE)
+    uint8_t token;
+    do {
+        token = SPI::raw_byte_read();
+    } while (token != 0xFE);
+    // Skip the entire sector
+    for (size_t i = 0; i < sizeof(sectorCache) + 2; i++) { // +2 for crc
+        SPI::raw_byte_read();
+    }
+    SD::cs_reset();
+    SPI::end();
+    sdRequestedSector = NO_SECTOR;
+}
+
+DRESULT disk_readp_ex (
     BYTE* buff,		/* Pointer to the destination object */
     DWORD sector,	/* Sector number (LBA) */
+    DWORD next_sector, /* Next sector number (LBA) for pre-fetching */
     UINT offset,	/* Offset in the sector */
     UINT count		/* Byte count (bit15:destination) */
 )
 {
     DRESULT res = RES_ERROR;
 
-    // Check if the requested sector is already cached
-    if (sectorCacheSector != sector) {
-        SPI::begin();
-        SD::cs_set();
-        if (SD::send_command(17, sector, 0x01) == 0x00) { // CMD17 to read a single block
-            // Wait for data token (0xFE)
-            uint8_t token;
-            do {
-                token = SPI::raw_byte_read();
-            } while (token != 0xFE);
+    if (sectorCacheSector == sector) {
+        res = RES_OK;
+    }
+    else if (sector == sdRequestedSector) {
+        // already requested sector from sd card, wait and read it
+        sd_read_sector();
+        sectorCacheSector = sector;
+        res = RES_OK;
 
-            // Read the entire sector into the cache
-            SPI::raw_read(sectorCache, sizeof(sectorCache));
-
-            // Skip CRC bytes
-            SPI::raw_byte_read();
-            SPI::raw_byte_read();
-
-            // Update the cached sector number
-            sectorCacheSector = sector;
-
-            res = RES_OK;
-        }
-        SD::cs_reset();
-        SPI::end();
-    } else {
-        res = RES_OK; // Cache hit
+    }
+    else if (sdRequestedSector != NO_SECTOR && sector != sdRequestedSector) {
+        // requested sector earlier but now we need different one, drop the earlier one
+        sd_drop_sector();
     }
 
-    // If the sector is cached, copy the requested bytes from the cache
-    if (res == RES_OK) {
-        //std::copy(sectorCache + offset, sectorCache + offset + count, buff);
-        // use raw loop
-        for (UINT i = 0; i < count; i++) {
-            buff[i] = sectorCache[offset + i];
+    if (res != RES_OK) {
+        // need to request the sector now and wait for it
+        res = sd_request_sector(sector);
+        if (res == RES_OK) {
+            sd_read_sector();
+            sectorCacheSector = sector;
         }
+    }
+
+    if (res == RES_OK) {
+        // correct sector is in cache
+        std::copy(sectorCache + offset, sectorCache + offset + count, buff);
+    }
+
+    if (sdRequestedSector == NO_SECTOR && next_sector != NO_SECTOR && next_sector != sectorCacheSector) {
+        // request next sector as pre-fetch
+        sd_request_sector(next_sector);
     }
 
     return res;

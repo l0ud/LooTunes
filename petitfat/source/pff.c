@@ -1006,21 +1006,27 @@ FRESULT pf_read (
 
 	return FR_OK;
 }
-CLUST pf_next_cached_cluster()
+
+CLUST pf_next_cached_cluster(CLUST *next_clst)
 {
 	FATFS *fs = FatFs;
 	CRANGE *range = fs->fcurr_range;
 
 	if (range->remaining) {
 		range->remaining--;
+		*next_clst = (range->remaining > 0) ? (range->cluster + 1) : ((range + 1)->cluster);
 		return range->cluster++;
 	}
 
 	range++;
-	if (!range->cluster) return 0;
+	if (!range->cluster) {
+		*next_clst = 0;
+		return 0;
+	}
 
 	fs->fcurr_range = range;
 	range->remaining--;
+	*next_clst = (range->remaining > 0) ? (range->cluster + 1) : ((range + 1)->cluster);
 	return range->cluster++;
 }
 
@@ -1049,17 +1055,32 @@ FRESULT pf_read_cached (
 		if ((fs->fptr % 512) == 0) {				/* On the sector boundary? */
 			cs = (BYTE)(fs->fptr / 512 & (fs->csize - 1));	/* Sector offset in the cluster */
 			if (!cs) {								/* On the cluster boundary? */
-				clst = pf_next_cached_cluster();
+				clst = pf_next_cached_cluster(&fs->next_clust);
 				if (clst <= 1) ABORT(FR_DISK_ERR);
 				fs->curr_clust = clst;				/* Update current cluster */
 			}
 			sect = clust2sect(fs->curr_clust);		/* Get current sector */
 			if (!sect) ABORT(FR_DISK_ERR);
 			fs->dsect = sect + cs;
+
+			// get next sector for read-ahead
+
+			if (fs->fptr + 512 < fs->fsize) { // next sector should exist
+				if (cs + 1 < fs->csize) { // next sector is in the same cluster
+					fs->next_sect = fs->dsect + 1;
+				} else if (fs->next_clust) { // next sector is in the next cluster
+					fs->next_sect = clust2sect(fs->next_clust);
+				} else { // no next sector
+					fs->next_sect = NO_SECTOR;
+				}
+			} else {
+				fs->next_sect = NO_SECTOR;
+			}
+
 		}
 		rcnt = 512 - (UINT)fs->fptr % 512;			/* Get partial sector data from sector buffer */
 		if (rcnt > btr) rcnt = btr;
-		dr = disk_readp(rbuff, fs->dsect, (UINT)fs->fptr % 512, rcnt);
+		dr = disk_readp_ex(rbuff, fs->dsect, fs->next_sect, (UINT)fs->fptr % 512, rcnt);
 		if (dr) ABORT(FR_DISK_ERR);
 		fs->fptr += rcnt;							/* Advances file read pointer */
 		btr -= rcnt; *br += rcnt;					/* Update read counter */

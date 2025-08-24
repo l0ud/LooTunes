@@ -76,7 +76,9 @@ typedef struct {
 	DWORD	fsize;		/* File size */
 	CLUST	org_clust;	/* File start cluster */
 	CLUST	curr_clust;	/* File current cluster */
+	CLUST   next_clust;	/* File next cluster */
 	DWORD	dsect;		/* File current data sector */
+	DWORD	next_sect;	/* File next data sector */
 	CRANGE  fcrange[PF_CLUSTER_RANGES]; /* Cluster range of the current file */
 	CRANGE* fcurr_range; /* Current cluster range of the file */
 } FATFS;

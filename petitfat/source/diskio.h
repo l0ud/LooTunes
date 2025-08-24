@@ -28,12 +28,19 @@ typedef enum {
 /*---------------------------------------*/
 /* Prototypes for disk control functions */
 
+#define NO_SECTOR		0xFFFFFFFF	/* Invalid sector number */
+
 DSTATUS disk_initialize (void);
-DRESULT disk_readp (BYTE* buff, DWORD sector, UINT offser, UINT count);
+DRESULT disk_readp_ex (BYTE* buff, DWORD sector, DWORD next_sector, UINT offset, UINT count);
+static inline DRESULT disk_readp (BYTE* buff, DWORD sector, UINT offset, UINT count) {
+	return disk_readp_ex(buff, sector, NO_SECTOR, offset, count);
+}
+
 DRESULT disk_writep (const BYTE* buff, DWORD sc);
 
 #define STA_NOINIT		0x01	/* Drive not initialized */
 #define STA_NODISK		0x02	/* No medium in the drive */
+
 
 #ifdef __cplusplus
 }
