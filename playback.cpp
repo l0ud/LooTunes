@@ -46,7 +46,7 @@ namespace {
 Controller::MState Controller::m_state = Controller::MState::FORCED_OFF;
 Controller::PState Controller::p_state = Controller::PState::NOT_PLAYING;
 
-void Controller::init() {
+bool Controller::init() {
     // init TIM1
 
     __HAL_RCC_TIM1_CLK_ENABLE();
@@ -118,33 +118,13 @@ void Controller::init() {
     DMA1_Channel2->CCR |= DMA_CCR_EN;     // Enable DMA2 Channel
 
     TIM1->CR1 = TIM_CR1_ARPE;         // Enable timer AUTO PRELOAD
-}
 
-void DMA1_Channel1_IRQHandler()
-{
-    // check interrupt source
-    if (DMA1->ISR & DMA_ISR_TCIF1) {
-        // clear interrupt flag
-        transfer_complete = true;
-        DMA1->IFCR |= DMA_IFCR_CTCIF1;
-    }
-    if (DMA1->ISR & DMA_ISR_HTIF1) {
-        // clear interrupt flag
-        half_transfer = true;
-        DMA1->IFCR |= DMA_IFCR_CHTIF1;
-    }
-}
-
-void Controller::main() {
-    init();
-    FRESULT res;
-
-    res = pf_mount(&fs);
+    FRESULT res = pf_mount(&fs);
     WDT::feed();
     
     if (res != FR_OK) {
         // todo: might handle mount error
-        return;
+        return false;
     }
 
     // load config file
@@ -163,9 +143,28 @@ void Controller::main() {
         set_thresholds_for_state();
     }
 
+    return true;
+}
+
+void DMA1_Channel1_IRQHandler()
+{
+    // check interrupt source
+    if (DMA1->ISR & DMA_ISR_TCIF1) {
+        // clear interrupt flag
+        transfer_complete = true;
+        DMA1->IFCR |= DMA_IFCR_CTCIF1;
+    }
+    if (DMA1->ISR & DMA_ISR_HTIF1) {
+        // clear interrupt flag
+        half_transfer = true;
+        DMA1->IFCR |= DMA_IFCR_CHTIF1;
+    }
+}
+
+void Controller::main() {
     // list main directory
     DIR dj;
-    res = pf_opendir(&dj, "/");
+    FRESULT res = pf_opendir(&dj, "/");
     if (res != FR_OK) {
         // todo: might handle opendir error
         return;

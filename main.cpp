@@ -71,6 +71,8 @@ int main() {
   LIGHT::init();
   WDT::feed();
 
+  while (!Controller::init()) { }
+
   while(1) {
     Controller::main();
   }

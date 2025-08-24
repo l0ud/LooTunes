@@ -34,6 +34,13 @@ DWORD sdRequestedSector = NO_SECTOR;
 bool sdMultiTransfer = false;
 
 
+void make_empty_traffic() {
+    // some cards apparently need it?
+    // should be performed with deselected CS
+    SPI::raw_byte_read();
+    SPI::raw_byte_read();
+}
+
 DRESULT sd_request_sector(DWORD sector) {
     SPI::begin();
     SD::cs_set();
@@ -69,6 +76,7 @@ DRESULT sd_stop_sector_stream() {
     if (SD::send_command(12, 0, 0x01) != 0x00) { // CMD12 to stop transmission
         // command failed
         SD::cs_reset();
+        make_empty_traffic();
         SPI::end();
         return RES_ERROR;
     }
@@ -77,6 +85,7 @@ DRESULT sd_stop_sector_stream() {
     sdMultiTransfer = false;
 
     SD::cs_reset();
+    make_empty_traffic();
     SPI::end();
     return RES_OK;
 }
@@ -100,6 +109,8 @@ void sd_read_sector() {
     }
     else {
         SD::cs_reset();
+        // for my testing it's not needed in all cards I have
+        // make_empty_traffic();
         SPI::end();
         sdRequestedSector = NO_SECTOR;
     }
@@ -132,7 +143,7 @@ DRESULT disk_readp_ex (
         }
     }
 
-    if (res != RES_OK) { // we don't have data yet
+    if (res != RES_OK) { // we don't have sector data yet
 
         // need to request the sector now and wait for it
         if (next_sector == sector + 1) { // transfer needed
@@ -147,12 +158,13 @@ DRESULT disk_readp_ex (
             sd_read_sector();
             sdCachedSector = sector;
         }
+        else {
+            return res;
+        }
     }
 
-    if (res == RES_OK) {
-        // correct sector is in cache
-        std::copy(sectorCache + offset, sectorCache + offset + count, buff);
-    }
+    // correct sector is in cache
+    std::copy(sectorCache + offset, sectorCache + offset + count, buff);
 
     // at this point we have the correct sector, but we might want to pre-fetch the next one
     if (sdRequestedSector == NO_SECTOR && next_sector != NO_SECTOR) {
@@ -227,6 +239,7 @@ uint8_t SD::send_command(uint8_t cmd, uint32_t arg, uint8_t crc) {
             break; // Response received
         }
     }
+
     return response;
 }
 
@@ -261,8 +274,7 @@ bool SD::init() {
 
     retries = 4; // todo: consider if this retry mechanism is necessary, might just fail
     do {
-        SPI::raw_byte_read(); // some cards apparently need it?
-        SPI::raw_byte_read(); // some cards apparently need it?
+        make_empty_traffic();
 
         // Step 3: Send CMD8 (SEND_IF_COND) to check card version
         cs_set();
@@ -287,26 +299,21 @@ bool SD::init() {
 
     // Step 4: Send ACMD41 repeatedly until the card exits idle state
     do {
-        SPI::raw_byte_read(); // some cards apparently need it?
-        SPI::raw_byte_read(); // some cards apparently need it?
+        make_empty_traffic();
 
         // Send CMD55 (APP_CMD) before ACMD41
         cs_set();
         response = send_command(55, 0, 0x01); // CMD55, no argument, CRC ignored in SPI mode
         cs_reset();
 
-        SPI::raw_byte_read(); // some cards apparently need it?
-        SPI::raw_byte_read(); // some cards apparently need it?
-
+        make_empty_traffic();
 
         cs_set();
         response = send_command(41, 0x40000000, 0x01); // ACMD41, argument = HCS (Host Capacity Support)
         cs_reset();
     } while (response != 0x00);
 
-    SPI::raw_byte_read(); // some cards apparently need it?
-    SPI::raw_byte_read(); // some cards apparently need it?
-
+    make_empty_traffic();
 
     // Step 5: Send CMD58 (READ_OCR) to read OCR register
     cs_set();

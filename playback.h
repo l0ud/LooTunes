@@ -17,6 +17,7 @@ class Controller {
             PLAYING,
         } p_state;
 
+        static bool init();
         static void main();
         static void on_button_press(BTN::ID id);
         static void on_light_sensor(uint16_t value);
@@ -25,6 +26,5 @@ class Controller {
         static void change_playing_state(PState new_state);
         static void set_thresholds_for_state();
         static void play_file(const char* filename);
-        static void init();
 
 };
