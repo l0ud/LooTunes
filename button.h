@@ -7,7 +7,7 @@ class BTN {
 public:
     enum class ID : uint32_t {
         POWER = 0, // left button, short press
-        TODO, // left button, long press
+        NEXT_DIR, // left button, long press
         NEXT, // right button, short press
         PREV // right button, long press
     };

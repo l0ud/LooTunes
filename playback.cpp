@@ -1,9 +1,9 @@
 #include <cstddef>
+#include <array>
 
 #include "playback.h"
 #include "libsbc/include/sbc.h"
 
-#include "petitfat/source/pff.h"
 #include "gpio.h"
 #include "watchdog.h"
 #include "config.h"
@@ -15,6 +15,12 @@ extern "C" {
     #include "py32f0xx_hal.h"
 }
 
+template <typename T, std::size_t N, T Value>
+constexpr auto make_filled_array() {
+    std::array<T, N> arr{};
+    arr.fill(Value);
+    return arr;
+}
 
 #define CHANNEL_HALF_BUFFER (SBC_MAX_SAMPLES) // 128
 #define CHANNEL_FULL_BUFFER (CHANNEL_HALF_BUFFER * 2) // 256
@@ -26,6 +32,8 @@ namespace {
     int16_t pcml[CHANNEL_FULL_BUFFER] = {0};
     int16_t pcmr[CHANNEL_FULL_BUFFER] = {0};
 
+    constexpr auto silence = make_filled_array<int16_t, CHANNEL_FULL_BUFFER, 136>();
+
     volatile bool half_transfer = false;
     volatile bool transfer_complete = false;
 
@@ -33,7 +41,8 @@ namespace {
     enum class PlaybackCommand : uint8_t {
         KeepPlaying = 0,
         NextTrack = 1,
-        PrevTrack = 2
+        PrevTrack = 2,
+        NextDirectory = 3,
     };
     volatile PlaybackCommand playback_command = PlaybackCommand::KeepPlaying;
 
@@ -46,7 +55,7 @@ namespace {
 Controller::MState Controller::m_state = Controller::MState::FORCED_OFF;
 Controller::PState Controller::p_state = Controller::PState::NOT_PLAYING;
 
-bool Controller::init() {
+void Controller::init() {
     // init TIM1
 
     __HAL_RCC_TIM1_CLK_ENABLE();
@@ -118,7 +127,10 @@ bool Controller::init() {
     DMA1_Channel2->CCR |= DMA_CCR_EN;     // Enable DMA2 Channel
 
     TIM1->CR1 = TIM_CR1_ARPE;         // Enable timer AUTO PRELOAD
+    sd_init();
+}
 
+bool Controller::sd_init() {
     FRESULT res = pf_mount(&fs);
     WDT::feed();
     
@@ -146,6 +158,16 @@ bool Controller::init() {
     return true;
 }
 
+void Controller::mute() {
+    DMA1_Channel1->CMAR = (uint32_t)silence.data();
+    DMA1_Channel2->CMAR = (uint32_t)silence.data();
+}
+
+void Controller::unmute() {
+    DMA1_Channel1->CMAR = (uint32_t)pcml;
+    DMA1_Channel2->CMAR = (uint32_t)pcmr;
+}
+
 void DMA1_Channel1_IRQHandler()
 {
     // check interrupt source
@@ -161,35 +183,72 @@ void DMA1_Channel1_IRQHandler()
     }
 }
 
-void Controller::main() {
+bool Controller::main() {
     // list main directory
-    DIR dj;
-    FRESULT res = pf_opendir(&dj, "/");
+    DIR main_dir = {0};
+    FILINFO fno;
+    FRESULT res = pf_opendir(&main_dir, "/");
     if (res != FR_OK) {
-        // todo: might handle opendir error
-        return;
+        return false;
     }
 
-
     for (;;) {
-        FILINFO fno;
-        if (playback_command == PlaybackCommand::PrevTrack) {
-            pf_prevdir(&dj);
+        res = pf_readdir(&main_dir, &fno);
+
+        if (res != FR_OK) {
+            return false;
         }
 
-        res = pf_readdir(&dj, &fno);
-        if (res != FR_OK || fno.fname[0] == 0) {
+        if (fno.fname[0] == 0) {
             break;
         }
 
-        WDT::feed();
+        if (fno.fattrib & AM_DIR) {
+            // If it's a directory, we can enter it
+            DIR sub_dir = {0};
 
-        playback_command = PlaybackCommand::KeepPlaying;
-        // Handle file
-        play_file(fno.fname);
+            res = pf_opendir(&sub_dir, fno.fname);
+            if (res != FR_OK && res != FR_NO_FILE) {
+                return false;
+            }
 
+            if (res == FR_NO_FILE) {
+                continue;
+            }
+
+            while(1) {
+                if (playback_command == PlaybackCommand::PrevTrack) {
+                    pf_prevdir(&sub_dir);
+                }
+
+                res = pf_readdir(&sub_dir, &fno);
+
+                if (res != FR_OK && res != FR_NO_FILE) {
+                    return false;
+                }
+
+                if (res == FR_NO_FILE || fno.fname[0] == 0) {
+                    break;
+                }
+
+                if (fno.fattrib & AM_DIR) {
+                    continue;
+                }
+                // Handle file
+                WDT::feed();
+                playback_command = PlaybackCommand::KeepPlaying;
+                
+                play_file(&fno);
+
+                if (playback_command == PlaybackCommand::NextDirectory) {
+                    break;
+                }
+            }
+
+        }
     }
 
+    return true;
 }
 
 inline __attribute__((always_inline)) UINT freadwrap(void* buff, UINT size) {
@@ -226,8 +285,8 @@ void Controller::on_button_press(BTN::ID id)
             change_main_state(new_state);
             break;
         }
-        case BTN::ID::TODO:
-            // decide what holding power button might do, if needed
+        case BTN::ID::NEXT_DIR:
+            playback_command = PlaybackCommand::NextDirectory;
             break;
         case BTN::ID::NEXT:
             playback_command = PlaybackCommand::NextTrack;
@@ -241,10 +300,10 @@ void Controller::on_button_press(BTN::ID id)
 void Controller::on_light_sensor(uint16_t value)
 {
     if (m_state == MState::SENSOR) {
-        if (value < CFG.on_treshold) {
+        if (value < CFG.on_threshold) {
             // turn on
             change_playing_state(CFG.light_mode == Config::LightMode::Normal ? PState::PLAYING : PState::NOT_PLAYING);
-        } else if (value > CFG.off_treshold) {
+        } else if (value > CFG.off_threshold) {
             // turn off
             change_playing_state(CFG.light_mode == Config::LightMode::Normal ? PState::NOT_PLAYING : PState::PLAYING);
         }
@@ -262,11 +321,11 @@ void Controller::set_thresholds_for_state()
     // closer to 0 the sensor value is, the more light is present
     if (arm_to_dim) {
         // we're playing - arm light sensor for powering off
-        LIGHT::set_thresholds(0, CFG.off_treshold);
+        LIGHT::set_thresholds(0, CFG.off_threshold);
     }
     else {
         // arm light sensor for dim condition
-        LIGHT::set_thresholds(CFG.on_treshold, 0xfff);
+        LIGHT::set_thresholds(CFG.on_threshold, 0xfff);
     }
 }
 
@@ -316,11 +375,11 @@ void Controller::change_playing_state(PState new_state)
     p_state = new_state;
 }
 
-void Controller::play_file(const char* filename)
+void Controller::play_file(FILINFO *file)
 {
     // Open file
     FRESULT res;
-    res = pf_open(filename);
+    res = pf_open_fileinfo(file);
     if (res != FR_OK) {
         // Handle open error
         return;
@@ -341,6 +400,8 @@ void Controller::play_file(const char* filename)
 
     int pos = 0;
 
+    unmute(); // todo: this might need to be moved deeper
+
     do {
         WDT::feed();
         if (freadwrap(data + SBC_PROBE_SIZE,
@@ -359,11 +420,11 @@ void Controller::play_file(const char* filename)
 
         __enable_irq();
         
-        const bool leftPart = pos < CHANNEL_HALF_BUFFER;
+        const bool left_part = pos < CHANNEL_HALF_BUFFER;
 
         pos += npcm;
 
-        if (leftPart && pos >= CHANNEL_HALF_BUFFER) {
+        if (left_part && pos >= CHANNEL_HALF_BUFFER) {
             // wait for transfer complete
             while (!transfer_complete) { };
             transfer_complete = false;
@@ -379,5 +440,5 @@ void Controller::play_file(const char* filename)
     }
 
     while(playback_command == PlaybackCommand::KeepPlaying && freadwrap(data, SBC_PROBE_SIZE) >= 1 && sbc_probe(data, &frame) == 0);
-
+    mute();
 }

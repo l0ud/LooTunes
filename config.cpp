@@ -64,8 +64,8 @@
         { "random_min", [](Config& cfg, const char* val) { set_uint8(cfg.random_min, val); } },
         { "random_max", [](Config& cfg, const char* val) { set_uint8(cfg.random_max, val); } },
         { "light_mode", set_light_mode },
-        { "on_treshold", [](Config& cfg, const char* val) { set_uint8(cfg.on_treshold, val); } },
-        { "off_treshold", [](Config& cfg, const char* val) { set_uint8(cfg.off_treshold, val); } },
+        { "on_threshold", [](Config& cfg, const char* val) { set_uint8(cfg.on_threshold, val); } },
+        { "off_threshold", [](Config& cfg, const char* val) { set_uint8(cfg.off_threshold, val); } },
         { "usb_mode", set_usb_mode },
         { "fade_in", [](Config& cfg, const char* val) { set_uint8(cfg.fade_in, val); } },
         { "fade_out", [](Config& cfg, const char* val) { set_uint8(cfg.fade_out, val); } },
@@ -80,8 +80,8 @@ Config::Config()
       light_mode(LightMode::Normal),
       // threshold range 0 - 0xfff
       // closer to 0 the more light is present
-      on_treshold(0xaff),
-      off_treshold(0xcff),
+      on_threshold(0xaff),
+      off_threshold(0xcff),
       usb_mode(UsbMode::OnPlayback),
       fade_in(10),
       fade_out(10)
@@ -200,11 +200,11 @@ __attribute__((noinline)) bool Config::load_from_file(const char* filename) {
                             light_mode = static_cast<LightMode>(v);
                         }
                     }
-                    else if (strcmp(key, "on_treshold") == 0) {
-                        on_treshold = static_cast<uint16_t>(atoi(value));
+                    else if (strcmp(key, "on_threshold") == 0) {
+                        on_threshold = static_cast<uint16_t>(atoi(value));
                     }
-                    else if (strcmp(key, "off_treshold") == 0) {
-                        off_treshold = static_cast<uint16_t>(atoi(value));
+                    else if (strcmp(key, "off_threshold") == 0) {
+                        off_threshold = static_cast<uint16_t>(atoi(value));
                     }
                     else if (strcmp(key, "usb_mode") == 0) {
                         int v = atoi(value);

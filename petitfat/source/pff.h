@@ -104,6 +104,8 @@ typedef struct {
 	WORD	fdate;		/* Last modified date */
 	WORD	ftime;		/* Last modified time */
 	BYTE	fattrib;	/* Attribute */
+	DWORD	sect;		/* Sector of file dir entry */
+	WORD	index;		/* Index of file dir entry */
 	char	fname[13];	/* File name */
 } FILINFO;
 
@@ -128,6 +130,7 @@ typedef enum {
 
 FRESULT pf_mount (FATFS* fs);								/* Mount/Unmount a logical drive */
 FRESULT pf_open (const char* path);							/* Open a file */
+FRESULT pf_open_fileinfo (FILINFO* dj);				     	/* Open a file from fileinfo structure */
 FRESULT pf_read (void* buff, UINT btr, UINT* br);			/* Read data from the open file */
 FRESULT pf_read_cached (void* buff, UINT btr, UINT* br);	/* Read data from the open file using cluster cache */
 FRESULT pf_write (const void* buff, UINT btw, UINT* bw);	/* Write data to the open file */

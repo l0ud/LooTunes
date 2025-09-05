@@ -70,11 +70,12 @@ int main() {
   //SPI::dma_map();
   LIGHT::init();
   WDT::feed();
-
-  while (!Controller::init()) { }
-
+  Controller::init();
+  
   while(1) {
-    Controller::main();
+  if (!Controller::main()) { // error caused by file system / sd card
+    Controller::sd_init();
+  }
   }
 
   return 0;

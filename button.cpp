@@ -89,7 +89,7 @@ void BTN::onTimerInterrupt() {
     }
     if ((GPIOB->IDR & GPIO_IDR_ID1) == 0) {
         // button 2 is still pressed, long press
-        ButtonPressCallback(ID::TODO);
+        ButtonPressCallback(ID::NEXT_DIR);
     }
 }
 

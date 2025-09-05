@@ -7,6 +7,12 @@ extern "C" {
     #include "petitfat/source/diskio.h"
 }
 
+namespace {
+    uint8_t sectorCache[512];
+    DWORD sdCachedSector = NO_SECTOR;
+    DWORD sdRequestedSector = NO_SECTOR;
+    bool sdMultiTransfer = false;
+}
 
 
 /*-----------------------------------------------------------------------*/
@@ -22,24 +28,17 @@ DSTATUS disk_initialize (void)
     return RES_ERROR;
 }
 
-/*-----------------------------------------------------------------------*/
-/* Read Partial Sector                                                   */
-/*-----------------------------------------------------------------------*/
-
-
-uint8_t sectorCache[512];
-
-DWORD sdCachedSector = NO_SECTOR;
-DWORD sdRequestedSector = NO_SECTOR;
-bool sdMultiTransfer = false;
-
-
 void make_empty_traffic() {
     // some cards apparently need it?
     // should be performed with deselected CS
     SPI::raw_byte_read();
     SPI::raw_byte_read();
 }
+
+
+/*-----------------------------------------------------------------------*/
+/* Read Partial Sector                                                   */
+/*-----------------------------------------------------------------------*/
 
 DRESULT sd_request_sector(DWORD sector) {
     SPI::begin();
@@ -95,7 +94,7 @@ void sd_read_sector() {
     uint8_t token;
     do {
         token = SPI::raw_byte_read();
-    } while (token != 0xFE);
+    } while (token == 0xFF);
 
     // Read the entire sector into the cache
     SPI::raw_read(sectorCache, sizeof(sectorCache));
@@ -244,6 +243,10 @@ uint8_t SD::send_command(uint8_t cmd, uint32_t arg, uint8_t crc) {
 }
 
 bool SD::init() {
+    sdCachedSector = NO_SECTOR;
+    sdRequestedSector = NO_SECTOR;
+    sdMultiTransfer = false;
+
     volatile uint8_t response;
     SPI::speed_mode(false); // slow SPI
     SPITransaction transaction; // enable SPI during this function

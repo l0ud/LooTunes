@@ -726,6 +726,8 @@ static void get_fileinfo (		/* No return code */
 		fno->fsize = ld_dword(dir+DIR_FileSize);	/* Size */
 		fno->fdate = ld_word(dir+DIR_WrtDate);		/* Date */
 		fno->ftime = ld_word(dir+DIR_WrtTime);		/* Time */
+		fno->sect = dj->sect;						/* Sector of file dir entry */
+		fno->index = dj->index;						/* Index of file dir entry */
 	}
 	*p = 0;
 }
@@ -941,6 +943,31 @@ FRESULT pf_open (
 	dj.fn = sp;
 	res = follow_path(&dj, dir, path);	/* Follow the file path */
 	if (res != FR_OK) return res;		/* Follow failed */
+	if (!dir[0] || (dir[DIR_Attr] & AM_DIR)) return FR_NO_FILE;	/* It is a directory */
+
+	fs->org_clust = get_clust(dir);		/* File start cluster */
+	fs->fsize = ld_dword(dir+DIR_FileSize);	/* File size */
+	pf_build_cluster_cache(fs->org_clust, fs->fsize);
+	fs->fptr = 0;						/* File pointer */
+	fs->flag = FA_OPENED;
+
+	return FR_OK;
+}
+
+FRESULT pf_open_fileinfo(FILINFO *fno)
+{
+	FRESULT res;
+	BYTE dir[32];
+	DIR dj = {0};
+	dj.sect = fno->sect;
+	dj.index = fno->index;
+	// we don't care about dj.sclust and dj.clust here as dir_read is unlikely to call dir_next
+
+	FATFS *fs = FatFs;
+
+	res = dir_read(&dj, dir);	/* Get current directory item */
+	if (res != FR_OK) return res;
+
 	if (!dir[0] || (dir[DIR_Attr] & AM_DIR)) return FR_NO_FILE;	/* It is a directory */
 
 	fs->org_clust = get_clust(dir);		/* File start cluster */
@@ -1291,26 +1318,6 @@ FRESULT pf_readdir (
 /* Directory handling - Move directory index to previous entry           */
 /* It's slow because it needs to start from the beginning                */
 /*-----------------------------------------------------------------------*/
-
-#if 0
-FRESULT pf_prevdir(DIR *dj)
-{
-    if (dj->index == 0) return FR_NO_FILE; /* Cannot go back from the first entry */
-
-    WORD target_index = dj->index - 1;
-
-    FRESULT res = dir_rewind(dj);
-    if (res != FR_OK) return res;
-
-    /* Move to the target index */
-    for (WORD i = 0; i < target_index; i++) {
-        res = dir_next(dj);
-        if (res != FR_OK) return res;
-    }
-
-    return FR_OK;
-}
-#endif
 
 FRESULT pf_prevdir(DIR *dj)
 {

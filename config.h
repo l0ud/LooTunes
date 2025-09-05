@@ -25,8 +25,8 @@ public:
     uint8_t random_max;         // Maximum random hops
 
     LightMode light_mode;       // Light mode
-    uint16_t on_treshold;        // Light threshold to power on (normal mode)
-    uint16_t off_treshold;       // Light threshold to power off (normal mode)
+    uint16_t on_threshold;        // Light threshold to power on (normal mode)
+    uint16_t off_threshold;       // Light threshold to power off (normal mode)
 
     UsbMode usb_mode;           // USB power mode
 
