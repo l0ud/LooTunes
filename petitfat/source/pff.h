@@ -137,7 +137,9 @@ FRESULT pf_write (const void* buff, UINT btw, UINT* bw);	/* Write data to the op
 FRESULT pf_lseek (DWORD ofs);								/* Move file pointer of the open file */
 FRESULT pf_opendir (DIR* dj, const char* path);				/* Open a directory */
 FRESULT pf_readdir (DIR* dj, FILINFO* fno);					/* Read a directory item from the open directory */
+FRESULT pf_readdir_n_element(DIR* dj, UINT n, FILINFO* fno);/* Read a specific directory item from the open directory */
 FRESULT pf_prevdir(DIR* dj);                                /* Move directory index to the previous item */
+UINT pf_countindir (DIR *dj); 							    /* Count files in the directory */
 
 
 /*--------------------------------------------------------------*/

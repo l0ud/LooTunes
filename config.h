@@ -21,8 +21,8 @@ public:
     Config();
 
     // Configuration parameters
-    uint8_t random_min;         // Minimum random hops
-    uint8_t random_max;         // Maximum random hops
+    uint8_t random_mode;         // Random playback mode
+    uint32_t seed;            // Seed for randomization
 
     LightMode light_mode;       // Light mode
     uint16_t on_threshold;        // Light threshold to power on (normal mode)

@@ -123,6 +123,10 @@ DRESULT disk_readp_ex (
     UINT count		/* Byte count (bit15:destination) */
 )
 {
+    if (next_sector == NO_SECTOR) {
+        next_sector = sector + 1; // heuristics
+    }
+
     DRESULT res = RES_ERROR;
 
     if (sdCachedSector == sector) {
@@ -177,33 +181,99 @@ DRESULT disk_readp_ex (
 /* Write Partial Sector                                                  */
 /*-----------------------------------------------------------------------*/
 
-DRESULT disk_writep (
-	const BYTE* buff,		/* Pointer to the data to be written, NULL:Initiate/Finalize write operation */
-	DWORD sc		/* Sector number (LBA) or Number of bytes to send */
-)
-{
-	DRESULT res;
-
-
-	if (!buff) {
-		if (sc) {
-
-			// Initiate write process
-
-		} else {
-
-			// Finalize write process
-
-		}
-	} else {
-
-		// Send data to the disk
-
-	}
-
-	return res;
+namespace {
+    UINT sdWriteBytes = 0;
 }
 
+DRESULT disk_writep (
+    const BYTE* buff,       /* Pointer to the data to be written, NULL:Initiate/Finalize write operation */
+    DWORD sc                /* Sector number (LBA) when buff==NULL and sc>0; or number of bytes to send when buff!=NULL */
+)
+{
+    // if read is pending stop it
+    if (sdRequestedSector != NO_SECTOR) {
+        if (sd_stop_sector_stream() != RES_OK) {
+            return RES_ERROR;
+        }
+    }
+
+    // Initiate write (buff == NULL, sc > 0): Send CMD24 and the data-start token (0xFE)
+    if (!buff) {
+        if (sc) {
+            // Start single-block write to LBA = sc (SDHC uses LBA directly)
+            SPI::begin();
+            SD::cs_set();
+
+            // CMD24 (WRITE_BLOCK)
+            if (SD::send_command(24, sc, 0x01) != 0x00) {
+                SD::cs_reset();
+                make_empty_traffic();
+                SPI::end();
+                return RES_ERROR;
+            }
+
+            // Send start token 0xFE
+            uint8_t token = 0xFE;
+            SPI::raw_write(&token, 1);
+
+            sdWriteBytes = 0;
+            return RES_OK;
+        } else {
+            // Finalize write (buff == NULL, sc == 0): send CRC, check data-response, wait busy release
+            while (sdWriteBytes < 512) {
+                uint8_t pad = 0;
+                SPI::raw_write(&pad, 1);
+                sdWriteBytes++;
+            }
+
+            // Send dummy CRC
+            uint8_t crc[2] = {0xFF, 0xFF};
+            SPI::raw_write(crc, 2);
+
+            // Get first non-0xFF data-response byte
+            uint8_t resp;
+            do { resp = SPI::raw_byte_read(); } while (resp == 0xFF);
+
+            // Data accepted = 0bxxx00101 (mask low 5 bits == 0x05)
+            if ((resp & 0x1F) != 0x05) {
+                SD::cs_reset();
+                make_empty_traffic();
+                SPI::end();
+                return RES_ERROR;
+            }
+
+            // Busy wait: card drives DO low (0x00) until the programming completes
+            // Add a simple timeout if desired
+            uint32_t guard = 0;
+            while (SPI::raw_byte_read() == 0x00) {
+                if (++guard > 10'000'000u) { // crude timeout guard
+                    SD::cs_reset();
+                    make_empty_traffic();
+                    SPI::end();
+                    return RES_ERROR;
+                }
+            }
+
+            // Release bus
+            SD::cs_reset();
+            make_empty_traffic();
+            SPI::end();
+            return RES_OK;
+        }
+    }
+
+    // Enforce sector-size limit
+    if (sdWriteBytes + (UINT)sc > 512) {
+        return RES_ERROR;
+    }
+
+    if (sc) {
+        SPI::raw_write((uint8_t*)buff, (size_t)sc);
+        sdWriteBytes += (UINT)sc;
+    }
+
+    return RES_OK;
+}
 
 
 

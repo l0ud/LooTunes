@@ -9,6 +9,8 @@
 #include "config.h"
 #include "light_sensor.h"
 
+#include "feistel.h"
+
 extern "C" {
     #include "defines.h"
     #include "py32f0xx.h"
@@ -54,6 +56,9 @@ namespace {
 
 Controller::MState Controller::m_state = Controller::MState::FORCED_OFF;
 Controller::PState Controller::p_state = Controller::PState::NOT_PLAYING;
+PlaybackState Controller::nv_state = {0};
+
+constexpr const char* StateFileName = "STATE.BIN";
 
 void Controller::init() {
     // init TIM1
@@ -140,7 +145,7 @@ bool Controller::sd_init() {
     }
 
     // load config file
-    CFG.load_from_file("config.ini");
+    CFG.load_from_file("CONFIG.INI");
 
     // apply static usb modes, if selected
     if (CFG.usb_mode == Config::UsbMode::AlwaysOn) {
@@ -154,6 +159,12 @@ bool Controller::sd_init() {
         change_playing_state(Controller::PState::PLAYING);
         set_thresholds_for_state();
     }
+    else {
+        change_main_state(Controller::MState::FORCED_OFF);
+    }
+
+    // load playback state
+    nv_state.load_from_file(StateFileName);
 
     return true;
 }
@@ -183,10 +194,11 @@ void DMA1_Channel1_IRQHandler()
     }
 }
 
-bool Controller::main() {
+bool Controller::sequential_playback() {
     // list main directory
     DIR main_dir = {0};
     FILINFO fno;
+    
     FRESULT res = pf_opendir(&main_dir, "/");
     if (res != FR_OK) {
         return false;
@@ -251,6 +263,119 @@ bool Controller::main() {
     return true;
 }
 
+
+bool Controller::random_playback() {
+    // list main directory
+    DIR main_dir = {0};
+    FILINFO fno;
+    
+    FRESULT res = pf_opendir(&main_dir, "/");
+    if (res != FR_OK) {
+        return false;
+    }
+
+    uint32_t dir_index = 0;
+
+    for (;;) {
+        res = pf_readdir(&main_dir, &fno);
+
+        if (res != FR_OK) {
+            return false;
+        }
+
+        if (fno.fname[0] == 0) {
+            break;
+        }
+
+        if (fno.fattrib & AM_DIR) {
+            // If it's a directory, we can enter it
+
+            dir_index++;
+            if (nv_state.being_applied && dir_index < nv_state.current_dir_index) {
+                // skip to correct directory
+                continue;
+            }
+
+            DIR sub_dir = {0};
+
+            res = pf_opendir(&sub_dir, fno.fname);
+            if (res != FR_OK && res != FR_NO_FILE) {
+                return false;
+            }
+
+            if (res == FR_NO_FILE) {
+                continue;
+            }
+
+            auto count = pf_countindir(&sub_dir);
+
+            if (count == 0) {
+                // empty directory, skip
+                continue;
+            }
+
+            if (!nv_state.being_applied || (nv_state.tracks_in_current_dir != count) || (nv_state.current_track_index >= count)) {
+                // previously saved state is invalid
+                nv_state.regenerate();
+                nv_state.tracks_in_current_dir = count;
+                nv_state.current_dir_index = dir_index;
+            }
+
+            nv_state.being_applied = false; // state loaded (or recalculated)
+            
+            while(1) {
+                if (playback_command == PlaybackCommand::PrevTrack && nv_state.current_track_index > 0) {
+                    nv_state.current_track_index--;
+                }
+                // get randomized index
+                const uint32_t randomized = permute(nv_state.current_track_index, nv_state.tracks_in_current_dir, nv_state.rand_key, 3);
+
+                res = pf_readdir_n_element(&sub_dir, randomized, &fno);
+
+                if (res != FR_OK && res != FR_NO_FILE) {
+                    return false;
+                }
+
+                if (res == FR_NO_FILE || fno.fname[0] == 0) {
+                    break;
+                }
+
+                if (fno.fattrib & AM_DIR) {
+                    continue;
+                }
+                // Handle file
+                WDT::feed();
+                playback_command = PlaybackCommand::KeepPlaying;
+
+                // save state before playing
+                if (nv_state.has_file) {
+                    nv_state.save_to_file(StateFileName);
+                }
+                
+                play_file(&fno);
+                if (playback_command != PlaybackCommand::PrevTrack) {
+                    nv_state.current_track_index++;
+                }
+
+                if (playback_command == PlaybackCommand::NextDirectory) {
+                    break;
+                }
+            }
+
+        }
+    }
+
+    if (nv_state.being_applied && dir_index < nv_state.current_dir_index) {
+        // we reached end of main directory, but did not reach the last played directory
+        // this means that the last played directory was invalid so reset playback state
+        nv_state.being_applied = false;
+    }
+
+    return true;
+}
+
+
+
 inline __attribute__((always_inline)) UINT freadwrap(void* buff, UINT size) {
     UINT br;
     FRESULT res = pf_read_cached(buff, size, &br);
@@ -279,7 +404,7 @@ void Controller::on_button_press(BTN::ID id)
 
             if (new_state == MState::SENSOR && CFG.light_mode == Config::LightMode::Disabled) {
                 // If light sensor is disabled, skip to FORCED_OFF state
-                new_state = MState::FORCED_OFF;
+                new_state = MState::FORCED_ON;
             }
 
             change_main_state(new_state);

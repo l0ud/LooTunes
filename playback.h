@@ -2,6 +2,7 @@
 
 #include "button.h"
 #include "petitfat/source/pff.h"
+#include "playback_state.h"
 
 
 class Controller {
@@ -20,7 +21,8 @@ class Controller {
 
         static void init();
         static bool sd_init();
-        static bool main();
+        static bool sequential_playback();
+        static bool random_playback();
         static void on_button_press(BTN::ID id);
         static void on_light_sensor(uint16_t value);
         static void mute();
@@ -30,5 +32,7 @@ class Controller {
         static void change_playing_state(PState new_state);
         static void set_thresholds_for_state();
         static void play_file(FILINFO *file);
+
+        static PlaybackState nv_state; // non-volatile playback state
 
 };

@@ -75,8 +75,8 @@
 //}
 
 Config::Config()
-    : random_min(1),
-      random_max(10),
+    : random_mode(1),
+      seed(0),
       light_mode(LightMode::Normal),
       // threshold range 0 - 0xfff
       // closer to 0 the more light is present
@@ -186,13 +186,13 @@ __attribute__((noinline)) bool Config::load_from_file(const char* filename) {
                     char* value = equal_sign + 1;
 
                     // todo: might remove trailing spaces from key and value if needed
-
+                    
                     // Parse and assign config parameters
-                    if (strcmp(key, "random_min") == 0) {
-                        random_min = static_cast<uint8_t>(atoi(value));
+                    if (strcmp(key, "random_mode") == 0) {
+                        random_mode = static_cast<uint8_t>(atoi(value));
                     }
-                    else if (strcmp(key, "random_max") == 0) {
-                        random_max = static_cast<uint8_t>(atoi(value));
+                    else if (strcmp(key, "seed") == 0) {
+                        seed = static_cast<uint32_t>(atoi(value));
                     }
                     else if (strcmp(key, "light_mode") == 0) {
                         int v = atoi(value);

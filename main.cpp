@@ -73,7 +73,7 @@ int main() {
   Controller::init();
   
   while(1) {
-  if (!Controller::main()) { // error caused by file system / sd card
+  if (!Controller::random_playback()) { // false = error caused by file system / sd card
     Controller::sd_init();
   }
   }

@@ -1179,7 +1179,7 @@ FRESULT pf_write (
 		fs->fptr += wcnt; p += wcnt;				/* Update pointers and counters */
 		btw -= wcnt; *bw += wcnt;
 		if ((UINT)fs->fptr % 512 == 0) {
-			if (disk_writep(0, 0)) ABORT(FR_DISK_ERR);	/* Finalize the currtent secter write operation */
+			if (disk_writep(0, 0)) ABORT(FR_DISK_ERR);	/* Finalize the current sector write operation */
 			fs->flag &= ~FA__WIP;
 		}
 	}
@@ -1312,6 +1312,63 @@ FRESULT pf_readdir (
 	}
 
 	return res;
+}
+
+FRESULT pf_readdir_n_element (
+	DIR *dj,			/* Pointer to the open directory object */
+	UINT n,			    /* File index relative to directory beginning (0-based) */
+	FILINFO *fno		/* Pointer to file information to return */
+)
+{
+	FRESULT res;
+	BYTE sp[12], dir[32];
+	FATFS *fs = FatFs;
+
+
+	if (!fs) {				/* Check file system */
+		res = FR_NOT_ENABLED;
+	} else {
+		dj->fn = sp;
+		res = dir_rewind(dj);
+		if (res != FR_OK) return res;
+		res = dir_read(dj, dir);	/* Get current directory item */
+		if (res != FR_OK) return res;
+
+		while(n--) {
+			res = dir_next(dj);			/* Increment read index for next */
+			if (res != FR_OK) return res;
+			res = dir_read(dj, dir);	/* Get current directory item */
+			if (res != FR_OK) return res;
+		}
+
+		get_fileinfo(dj, dir, fno);	/* Get the object information */
+	}
+
+	return res;
+}
+
+UINT pf_countindir (
+	DIR *dj			/* Pointer to the directory object */
+)
+{
+	UINT n = 0;
+	FRESULT res;
+	BYTE dir[32];
+
+	if (!dj) return 0;
+
+	res = dir_rewind(dj);
+	if (res == FR_OK) {
+		while (dir_read(dj, dir) == FR_OK) {
+			if (!(dir[DIR_Attr] & AM_DIR)) n++;
+			res = dir_next(dj);			/* Increment read index for next */
+			if (res != FR_OK) break;
+		}
+	}
+
+	res = dir_rewind(dj); // rewind back
+
+	return n;
 }
 
 /*-----------------------------------------------------------------------*/
