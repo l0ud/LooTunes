@@ -21,6 +21,7 @@ class Controller {
 
         static void init();
         static bool sd_init();
+        static bool main();
         static bool sequential_playback();
         static bool random_playback();
         static void on_button_press(BTN::ID id);
@@ -34,5 +35,9 @@ class Controller {
         static void play_file(FILINFO *file);
 
         static PlaybackState nv_state; // non-volatile playback state
+        static DIR main_dir;
+        static DIR sub_dir;
+        static FILINFO current_file;
+
 
 };

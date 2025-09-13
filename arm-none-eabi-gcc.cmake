@@ -58,7 +58,7 @@ set(CMAKE_TRY_COMPILE_TARGET_TYPE STATIC_LIBRARY)
 set(OBJECT_GEN_FLAGS "-mthumb -fno-builtin -Wall -ffunction-sections -fdata-sections -fomit-frame-pointer -mabi=aapcs")
 
 set(CMAKE_C_FLAGS   "${OBJECT_GEN_FLAGS} -std=gnu99 -fstack-usage " CACHE INTERNAL "C Compiler options")
-set(CMAKE_CXX_FLAGS "${OBJECT_GEN_FLAGS} -std=c++17 -fstack-usage " CACHE INTERNAL "C++ Compiler options")
+set(CMAKE_CXX_FLAGS "${OBJECT_GEN_FLAGS} -std=c++20 -fstack-usage " CACHE INTERNAL "C++ Compiler options")
 set(CMAKE_ASM_FLAGS "${OBJECT_GEN_FLAGS} -x assembler-with-cpp " CACHE INTERNAL "ASM Compiler options")
 
 
@@ -83,9 +83,9 @@ set(CMAKE_EXE_LINKER_FLAGS_DEBUG "" CACHE INTERNAL "Linker options for debug bui
 # -Os   Optimize for size. -Os enables all -O2 optimizations.
 # -flto Runs the standard link-time optimizer.
 set(CMAKE_C_FLAGS_RELEASE "-O2" CACHE INTERNAL "C Compiler options for release build type")
-set(CMAKE_CXX_FLAGS_RELEASE "-O2 -flto" CACHE INTERNAL "C++ Compiler options for release build type")
+set(CMAKE_CXX_FLAGS_RELEASE "-O2" CACHE INTERNAL "C++ Compiler options for release build type")
 set(CMAKE_ASM_FLAGS_RELEASE "" CACHE INTERNAL "ASM Compiler options for release build type")
-set(CMAKE_EXE_LINKER_FLAGS_RELEASE "-flto" CACHE INTERNAL "Linker options for release build type")
+set(CMAKE_EXE_LINKER_FLAGS_RELEASE CACHE INTERNAL "Linker options for release build type")
 
 
 #---------------------------------------------------------------------------------------

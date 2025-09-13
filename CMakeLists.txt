@@ -25,6 +25,8 @@ set(PROJECT_FILES
         button.cpp
         config.cpp
         light_sensor.cpp
+        playback_state.cpp
+        feistel.cpp
         libsbc/src/sbc.c
         libsbc/src/bits.c
         petitfat/source/diskio.c

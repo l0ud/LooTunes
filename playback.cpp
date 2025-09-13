@@ -57,6 +57,9 @@ namespace {
 Controller::MState Controller::m_state = Controller::MState::FORCED_OFF;
 Controller::PState Controller::p_state = Controller::PState::NOT_PLAYING;
 PlaybackState Controller::nv_state = {0};
+DIR Controller::main_dir = {0};
+DIR Controller::sub_dir = {0};
+FILINFO Controller::current_file = {0};
 
 constexpr const char* StateFileName = "STATE.BIN";
 
@@ -166,6 +169,11 @@ bool Controller::sd_init() {
     // load playback state
     nv_state.load_from_file(StateFileName);
 
+    if (nv_state.is_random != CFG.random_mode) {
+        nv_state.regenerate();
+        nv_state.is_random = CFG.random_mode;
+    }
+
     return true;
 }
 
@@ -194,81 +202,8 @@ void DMA1_Channel1_IRQHandler()
     }
 }
 
-bool Controller::sequential_playback() {
+bool Controller::main() {
     // list main directory
-    DIR main_dir = {0};
-    FILINFO fno;
-    
-    FRESULT res = pf_opendir(&main_dir, "/");
-    if (res != FR_OK) {
-        return false;
-    }
-
-    for (;;) {
-        res = pf_readdir(&main_dir, &fno);
-
-        if (res != FR_OK) {
-            return false;
-        }
-
-        if (fno.fname[0] == 0) {
-            break;
-        }
-
-        if (fno.fattrib & AM_DIR) {
-            // If it's a directory, we can enter it
-            DIR sub_dir = {0};
-
-            res = pf_opendir(&sub_dir, fno.fname);
-            if (res != FR_OK && res != FR_NO_FILE) {
-                return false;
-            }
-
-            if (res == FR_NO_FILE) {
-                continue;
-            }
-
-            while(1) {
-                if (playback_command == PlaybackCommand::PrevTrack) {
-                    pf_prevdir(&sub_dir);
-                }
-
-                res = pf_readdir(&sub_dir, &fno);
-
-                if (res != FR_OK && res != FR_NO_FILE) {
-                    return false;
-                }
-
-                if (res == FR_NO_FILE || fno.fname[0] == 0) {
-                    break;
-                }
-
-                if (fno.fattrib & AM_DIR) {
-                    continue;
-                }
-                // Handle file
-                WDT::feed();
-                playback_command = PlaybackCommand::KeepPlaying;
-                
-                play_file(&fno);
-
-                if (playback_command == PlaybackCommand::NextDirectory) {
-                    break;
-                }
-            }
-
-        }
-    }
-
-    return true;
-}
-
-
-bool Controller::random_playback() {
-    // list main directory
-    DIR main_dir = {0};
-    FILINFO fno;
-    
     FRESULT res = pf_opendir(&main_dir, "/");
     if (res != FR_OK) {
         return false;
@@ -277,17 +212,17 @@ bool Controller::random_playback() {
     uint32_t dir_index = 0;
 
     for (;;) {
-        res = pf_readdir(&main_dir, &fno);
+        res = pf_readdir(&main_dir, &current_file);
 
         if (res != FR_OK) {
             return false;
         }
 
-        if (fno.fname[0] == 0) {
+        if (current_file.fname[0] == 0) {
             break;
         }
 
-        if (fno.fattrib & AM_DIR) {
+        if (current_file.fattrib & AM_DIR) {
             // If it's a directory, we can enter it
 
             dir_index++;
@@ -296,9 +231,7 @@ bool Controller::random_playback() {
                 continue;
             }
 
-            DIR sub_dir = {0};
-
-            res = pf_opendir(&sub_dir, fno.fname);
+            res = pf_opendir(&sub_dir, current_file.fname);
             if (res != FR_OK && res != FR_NO_FILE) {
                 return false;
             }
@@ -307,61 +240,15 @@ bool Controller::random_playback() {
                 continue;
             }
 
-            auto count = pf_countindir(&sub_dir);
-
-            if (count == 0) {
-                // empty directory, skip
-                continue;
-            }
-
-            if (!nv_state.being_applied || (nv_state.tracks_in_current_dir != count) || (nv_state.current_track_index >= count)) {
-                // previously saved state is invalid
-                nv_state.regenerate();
-                nv_state.tracks_in_current_dir = count;
-                nv_state.current_dir_index = dir_index;
-            }
-
-            nv_state.being_applied = false; // state loaded (or recalculated)
-            
-            while(1) {
-                if (playback_command == PlaybackCommand::PrevTrack && nv_state.current_track_index > 0) {
-                    nv_state.current_track_index--;
-                }
-                // get randomized index
-                const uint32_t randomized = permute(nv_state.current_track_index, nv_state.tracks_in_current_dir, nv_state.rand_key, 3);
-
-                res = pf_readdir_n_element(&sub_dir, randomized, &fno);
-
-                if (res != FR_OK && res != FR_NO_FILE) {
+            if (CFG.random_mode) {
+                if (!random_playback()) {
                     return false;
                 }
-
-                if (res == FR_NO_FILE || fno.fname[0] == 0) {
-                    break;
-                }
-
-                if (fno.fattrib & AM_DIR) {
-                    continue;
-                }
-                // Handle file
-                WDT::feed();
-                playback_command = PlaybackCommand::KeepPlaying;
-
-                // save state before playing
-                if (nv_state.has_file) {
-                    nv_state.save_to_file(StateFileName);
-                }
-                
-                play_file(&fno);
-                if (playback_command != PlaybackCommand::PrevTrack) {
-                    nv_state.current_track_index++;
-                }
-
-                if (playback_command == PlaybackCommand::NextDirectory) {
-                    break;
+            } else {
+                if (!sequential_playback()) {
+                    return false;
                 }
             }
-
         }
     }
 
@@ -369,6 +256,124 @@ bool Controller::random_playback() {
         // we reached end of main directory, but did not reach the last played directory
         // this means that the last played directory was invalid so reset playback state
         nv_state.being_applied = false;
+    }
+
+    return true;
+}
+
+bool Controller::sequential_playback() {
+
+    if (nv_state.being_applied) {
+        // todo: check if state can be applied
+        // previously saved state is valid
+        pf_readdir_n_element(&sub_dir, nv_state.current_track_index, &current_file);
+    }
+
+    while(1) {
+        if (playback_command == PlaybackCommand::PrevTrack && nv_state.current_track_index > 0) {
+            nv_state.current_track_index--;
+            pf_prevdir(&sub_dir);
+        }
+
+        FRESULT res = pf_readdir(&sub_dir, &current_file);
+
+        if (res != FR_OK && res != FR_NO_FILE) {
+            return false;
+        }
+
+        if (res == FR_NO_FILE || current_file.fname[0] == 0) {
+            break;
+        }
+
+        if (current_file.fattrib & AM_DIR) {
+            continue;
+        }
+        // Handle file
+        WDT::feed();
+        playback_command = PlaybackCommand::KeepPlaying;
+        
+        // save state before playing, do not write first time
+        if (!nv_state.being_applied && nv_state.has_file) {
+            nv_state.save_to_file(StateFileName);
+        }
+
+        if (nv_state.being_applied) {
+            // state loaded
+            nv_state.being_applied = false;
+        }
+
+        play_file(&current_file);
+        if (playback_command != PlaybackCommand::PrevTrack) {
+            nv_state.current_track_index++;
+        }
+
+        if (playback_command == PlaybackCommand::NextDirectory) {
+            break;
+        }
+    }
+
+    return true;
+}
+
+
+bool Controller::random_playback() {
+    uint32_t dir_index = 0;
+    auto count = pf_countindir(&sub_dir);
+
+    if (count == 0) {
+        // empty directory, skip
+        return true;
+    }
+
+    if (!nv_state.being_applied || (nv_state.tracks_in_current_dir != count) || (nv_state.current_track_index >= count)) {
+        // previously saved state is invalid
+        nv_state.regenerate();
+        nv_state.tracks_in_current_dir = count;
+        nv_state.current_dir_index = dir_index;
+    }
+    
+    while(1) {
+        if (playback_command == PlaybackCommand::PrevTrack && nv_state.current_track_index > 0) {
+            nv_state.current_track_index--;
+        }
+        // get randomized index
+        const uint32_t randomized = permute(nv_state.current_track_index, nv_state.tracks_in_current_dir, nv_state.rand_key, 3);
+
+        FRESULT res = pf_readdir_n_element(&sub_dir, randomized, &current_file);
+
+        if (res != FR_OK && res != FR_NO_FILE) {
+            return false;
+        }
+
+        if (res == FR_NO_FILE || current_file.fname[0] == 0) {
+            break;
+        }
+
+        if (current_file.fattrib & AM_DIR) {
+            continue;
+        }
+        // Handle file
+        WDT::feed();
+        playback_command = PlaybackCommand::KeepPlaying;
+
+        // save state before playing, do not write first time
+        if (!nv_state.being_applied && nv_state.has_file) {
+            nv_state.save_to_file(StateFileName);
+        }
+
+        if (nv_state.being_applied) {
+            // state loaded
+            nv_state.being_applied = false;
+        }
+        
+        play_file(&current_file);
+        if (playback_command != PlaybackCommand::PrevTrack) {
+            nv_state.current_track_index++;
+        }
+
+        if (playback_command == PlaybackCommand::NextDirectory) {
+            break;
+        }
     }
 
     return true;
