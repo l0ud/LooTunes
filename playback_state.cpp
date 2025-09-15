@@ -6,7 +6,6 @@ bool PlaybackState::load_from_file(const char* filename) {
     FRESULT res = pf_open(filename);
     if (res != FR_OK) {
         has_file = false;
-        being_applied = false;
         return false;
     }
 
@@ -16,9 +15,8 @@ bool PlaybackState::load_from_file(const char* filename) {
     pf_read(&current_track_index, sizeof(current_track_index), &br);
     pf_read(&rand_key, sizeof(rand_key), &br);
     pf_read(&tracks_in_current_dir, sizeof(tracks_in_current_dir), &br);
-    pf_read(&is_random, sizeof(is_random), &br);
+    pf_read(&mode, sizeof(mode), &br);
     has_file = true;
-    being_applied = true;
     return true;
 }
 
@@ -40,7 +38,7 @@ bool PlaybackState::save_to_file(const char* filename) {
     pf_write(&current_track_index, sizeof(current_track_index), &br);
     pf_write(&rand_key, sizeof(rand_key), &br);
     pf_write(&tracks_in_current_dir, sizeof(tracks_in_current_dir), &br);
-    pf_write(&is_random, sizeof(is_random), &br);
+    pf_write(&mode, sizeof(mode), &br);
     pf_write(0, 0, &br); // finalize write operation
 
     return true;
@@ -49,7 +47,10 @@ bool PlaybackState::save_to_file(const char* filename) {
 void PlaybackState::regenerate() {
     current_dir_index = 0;
     current_track_index = 0;
-    rand_key = 0xDEADBEEF; // or some other default seed
     tracks_in_current_dir = 0;
-    being_applied = false;
+    regenerate_key();
+}
+
+void PlaybackState::regenerate_key() {
+    rand_key = 0xDEADBEEF; // or some other default seed
 }

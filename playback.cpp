@@ -3,13 +3,14 @@
 
 #include "playback.h"
 #include "libsbc/include/sbc.h"
-
 #include "gpio.h"
 #include "watchdog.h"
 #include "config.h"
 #include "light_sensor.h"
-
 #include "feistel.h"
+#include "petitfat/source/pff.h"
+#include "playback_state.h"
+#include "utility.h"
 
 extern "C" {
     #include "defines.h"
@@ -17,128 +18,162 @@ extern "C" {
     #include "py32f0xx_hal.h"
 }
 
-template <typename T, std::size_t N, T Value>
-constexpr auto make_filled_array() {
-    std::array<T, N> arr{};
-    arr.fill(Value);
-    return arr;
+// Global callback functions for external C interfaces
+void ButtonPressCallback(BTN::ID id) {
+    Controller::on_button_press(id);
 }
 
-#define CHANNEL_HALF_BUFFER (SBC_MAX_SAMPLES) // 128
-#define CHANNEL_FULL_BUFFER (CHANNEL_HALF_BUFFER * 2) // 256
-
-namespace {
-
-    FATFS fs;
-    uint8_t data[SBC_MAX_SAMPLES*sizeof(int16_t)] = {0};
-    int16_t pcml[CHANNEL_FULL_BUFFER] = {0};
-    int16_t pcmr[CHANNEL_FULL_BUFFER] = {0};
-
-    constexpr auto silence = make_filled_array<int16_t, CHANNEL_FULL_BUFFER, 136>();
-
-    volatile bool half_transfer = false;
-    volatile bool transfer_complete = false;
-
+void LightSensorCallback(uint16_t value) {
+    Controller::on_light_sensor(value);
 }
-    enum class PlaybackCommand : uint8_t {
-        KeepPlaying = 0,
-        NextTrack = 1,
-        PrevTrack = 2,
-        NextDirectory = 3,
-    };
-    volatile PlaybackCommand playback_command = PlaybackCommand::KeepPlaying;
 
-// Timer settings
-#define TIM_PERIOD_48KHZ (250 - 1)  // 192 kHz PWM frequency
-#define TIM_PERIOD_441KHZ (272 - 1)  // 176.4 kHz PWM frequency
-#define REPEAT_COUNT (3)      // Update every 4 PWM cycles (RCR + 1 = 4)
+namespace Controller {
 
-
-Controller::MState Controller::m_state = Controller::MState::FORCED_OFF;
-Controller::PState Controller::p_state = Controller::PState::NOT_PLAYING;
-PlaybackState Controller::nv_state = {0};
-DIR Controller::main_dir = {0};
-DIR Controller::sub_dir = {0};
-FILINFO Controller::current_file = {0};
+// =============================================================================
+// Constants and Configuration
+// =============================================================================
 
 constexpr const char* StateFileName = "STATE.BIN";
+constexpr const char* ConfigFileName = "CONFIG.INI";
 
-void Controller::init() {
-    // init TIM1
+// Audio buffer configuration
+constexpr auto CHANNEL_HALF_BUFFER = SBC_MAX_SAMPLES; // 128
+constexpr auto CHANNEL_FULL_BUFFER = CHANNEL_HALF_BUFFER * 2; // 256
 
+// Timer configuration
+constexpr uint32_t TIM_PERIOD_48KHZ = 250 - 1;   // 192 kHz PWM frequency
+constexpr uint32_t TIM_PERIOD_441KHZ = 272 - 1;  // 176.4 kHz PWM frequency
+constexpr uint32_t REPEAT_COUNT = 3;              // Update every 4 PWM cycles (RCR + 1 = 4)
+
+
+// =============================================================================
+// Internal Types and Enums
+// =============================================================================
+
+enum class PlaybackCommand : uint8_t {
+    KeepPlaying = 0,
+    NextTrack = 1,
+    PrevTrack = 2,
+    NextDirectory = 3,
+};
+
+enum class PState {
+    NOT_PLAYING,
+    PLAYING,
+};
+
+// =============================================================================
+// Forward Declarations
+// =============================================================================
+
+void change_main_state(PlaybackState::Mode new_state);
+void change_playing_state(PState new_state);
+void set_thresholds_for_state();
+
+void play_file(FILINFO *file);
+
+bool next_track();
+bool prev_track();
+bool next_dir();
+
+namespace {
+    // Audio system state
+    int16_t pcml[CHANNEL_FULL_BUFFER] = {0};
+    int16_t pcmr[CHANNEL_FULL_BUFFER] = {0};
+    uint8_t data[SBC_MAX_SAMPLES*sizeof(int16_t)] = {0};
+    constexpr auto silence = make_filled_array<int16_t, CHANNEL_FULL_BUFFER, 136>();
+
+    FATFS fs;
+
+    // Synchronization flags
+    volatile bool half_transfer = false;
+    volatile bool transfer_complete = false;
+    volatile bool save_state_requested = false;
+    volatile PlaybackCommand playback_command = PlaybackCommand::KeepPlaying;
+
+    // Playback state
+    PState p_state = PState::NOT_PLAYING;
+    PlaybackState nv_state = {0};
+    DIR main_dir = {0};
+    DIR sub_dir = {0};
+    uint32_t subdir_iter = 0;
+    FILINFO current_file = {0};
+}
+
+// =============================================================================
+// Hardware Initialization Functions
+// =============================================================================
+
+void init_timer() {
     __HAL_RCC_TIM1_CLK_ENABLE();
 
     // Configure TIM1 as PWM output
-    TIM1->PSC = 0;                   // No prescaler (48 MHz clock)
-    TIM1->ARR = TIM_PERIOD_441KHZ;   // Set Auto-Reload Register for desired frequency
-    TIM1->CCR2 = 0;                   // Set initial duty cycle to 0
-    TIM1->CCR3 = 0;                   // Set initial duty cycle to 0
-    
-    TIM1->RCR = REPEAT_COUNT;         // Update every 4 PWM cycles
+    TIM1->PSC = 0;                     // No prescaler (48 MHz clock)
+    TIM1->ARR = TIM_PERIOD_441KHZ;     // Set Auto-Reload Register for desired frequency
+    TIM1->CCR2 = 0;                    // Set initial duty cycle to 0
+    TIM1->CCR3 = 0;                    // Set initial duty cycle to 0
+    TIM1->RCR = REPEAT_COUNT;          // Update every 4 PWM cycles
 
     TIM1->CCMR1 |= TIM_CCMR1_OC2M_2 | TIM_CCMR1_OC2M_1;  // PWM Mode 1 (110)
     TIM1->CCMR2 |= TIM_CCMR2_OC3M_2 | TIM_CCMR2_OC3M_1;  // PWM Mode 1 (110)
 
-    TIM1->CCER |= TIM_CCER_CC2E | TIM_CCER_CC3E; // Enable CH2 and CH3 output
-    TIM1->DIER |= TIM_DIER_UDE;       // Enable Update DMA Request
-    TIM1->BDTR |= TIM_BDTR_MOE;       // Main Output Enable
-
-
-    // turn on DMA
-    __HAL_RCC_DMA_CLK_ENABLE();
-
-    SYSCFG->CFGR3 &= ~(SYSCFG_CFGR3_DMA1_MAP_Msk | SYSCFG_CFGR3_DMA2_MAP_Msk);
-    SYSCFG->CFGR3 |= SYSCFG_CFGR3_DMA1_MAP_4 | SYSCFG_CFGR3_DMA2_MAP_4 | SYSCFG_CFGR3_DMA2_ACKLVL | SYSCFG_CFGR3_DMA1_ACKLVL; // map dma channel 1 and 2 to TIM1_UP
-
-    // map channel 2
-
-
-    DMA1_Channel1->CCR &= ~DMA_CCR_EN;  // Disable DMA before configuration
-    DMA1_Channel1->CNDTR = CHANNEL_FULL_BUFFER;
-    DMA1_Channel1->CPAR = (uint32_t)&TIM1->CCR2;  // Peripheral address is CCR1
-    DMA1_Channel1->CMAR = (uint32_t)pcml;    // Memory address to left channel
-    
-    // Configure the DMA Channel settings
-    DMA1_Channel1->CCR |= DMA_CCR_MINC;  // Memory increment mode
-    DMA1_Channel1->CCR |= DMA_CCR_DIR;   // Memory-to-peripheral direction
-
-    //!!!!
-    DMA1_Channel1->CCR |= DMA_CCR_MSIZE_0; // Memory size: 16-bit
-
-    DMA1_Channel1->CCR |= DMA_CCR_PSIZE_0; // Peripheral size: 16-bit
-    DMA1_Channel1->CCR |= DMA_CCR_CIRC;   // Circular mode to repeat the DMA transfer
-    // enable half transfer and transfer complete interrupts
-    DMA1_Channel1->CCR |= DMA_CCR_HTIE | DMA_CCR_TCIE;
-
-    // Enable DMA interrupt
-    NVIC_EnableIRQ(DMA1_Channel1_IRQn);
-
-
-    // prepare DMA for right channel
-    DMA1_Channel2->CCR &= ~DMA_CCR_EN;  // Disable DMA before configuration
-    DMA1_Channel2->CNDTR = CHANNEL_FULL_BUFFER;
-    DMA1_Channel2->CPAR = (uint32_t)&TIM1->CCR3;  // Peripheral address is CCR3
-    DMA1_Channel2->CMAR = (uint32_t)pcmr;    // Memory address to right channel
-
-    // Configure the DMA Channel settings
-    DMA1_Channel2->CCR |= DMA_CCR_MINC;  // Memory increment mode
-    DMA1_Channel2->CCR |= DMA_CCR_DIR;   // Memory-to-peripheral direction
-
-    //!!!!
-    DMA1_Channel2->CCR |= DMA_CCR_MSIZE_0; // Memory size: 16-bit
-
-    DMA1_Channel2->CCR |= DMA_CCR_PSIZE_0; // Peripheral size: 16-bit
-    DMA1_Channel2->CCR |= DMA_CCR_CIRC;   // Circular mode to repeat the DMA transfer
-    // do not enable interrupts for right channel
-
-    DMA1_Channel1->CCR |= DMA_CCR_EN;     // Enable DMA1 Channel
-    DMA1_Channel2->CCR |= DMA_CCR_EN;     // Enable DMA2 Channel
-
-    TIM1->CR1 = TIM_CR1_ARPE;         // Enable timer AUTO PRELOAD
-    sd_init();
+    TIM1->CCER |= TIM_CCER_CC2E | TIM_CCER_CC3E;  // Enable CH2 and CH3 output
+    TIM1->DIER |= TIM_DIER_UDE;                   // Enable Update DMA Request
+    TIM1->BDTR |= TIM_BDTR_MOE;                   // Main Output Enable
+    TIM1->CR1 = TIM_CR1_ARPE;                     // Enable timer AUTO PRELOAD
 }
 
-bool Controller::sd_init() {
+void init_dma() {
+    __HAL_RCC_DMA_CLK_ENABLE();
+
+    // Configure DMA mapping
+    SYSCFG->CFGR3 &= ~(SYSCFG_CFGR3_DMA1_MAP_Msk | SYSCFG_CFGR3_DMA2_MAP_Msk);
+    SYSCFG->CFGR3 |= SYSCFG_CFGR3_DMA1_MAP_4 | SYSCFG_CFGR3_DMA2_MAP_4 | 
+                        SYSCFG_CFGR3_DMA2_ACKLVL | SYSCFG_CFGR3_DMA1_ACKLVL;
+
+    // Configure DMA Channel 1 (Left channel)
+    DMA1_Channel1->CCR &= ~DMA_CCR_EN;
+    DMA1_Channel1->CNDTR = CHANNEL_FULL_BUFFER;
+    DMA1_Channel1->CPAR = (uint32_t)&TIM1->CCR2;
+    DMA1_Channel1->CMAR = (uint32_t)pcml;
+    
+    DMA1_Channel1->CCR |= DMA_CCR_MINC |      // Memory increment mode
+                            DMA_CCR_DIR |       // Memory-to-peripheral direction
+                            DMA_CCR_MSIZE_0 |   // Memory size: 16-bit
+                            DMA_CCR_PSIZE_0 |   // Peripheral size: 16-bit
+                            DMA_CCR_CIRC |      // Circular mode
+                            DMA_CCR_HTIE |      // Half transfer interrupt
+                            DMA_CCR_TCIE;       // Transfer complete interrupt
+
+    // Configure DMA Channel 2 (Right channel)
+    DMA1_Channel2->CCR &= ~DMA_CCR_EN;
+    DMA1_Channel2->CNDTR = CHANNEL_FULL_BUFFER;
+    DMA1_Channel2->CPAR = (uint32_t)&TIM1->CCR3;
+    DMA1_Channel2->CMAR = (uint32_t)pcmr;
+    
+    DMA1_Channel2->CCR |= DMA_CCR_MINC |      // Memory increment mode
+                            DMA_CCR_DIR |       // Memory-to-peripheral direction
+                            DMA_CCR_MSIZE_0 |   // Memory size: 16-bit
+                            DMA_CCR_PSIZE_0 |   // Peripheral size: 16-bit
+                            DMA_CCR_CIRC;       // Circular mode
+
+    // Enable DMA channels and interrupt
+    NVIC_EnableIRQ(DMA1_Channel1_IRQn);
+    DMA1_Channel1->CCR |= DMA_CCR_EN;
+    DMA1_Channel2->CCR |= DMA_CCR_EN;
+}
+
+void init() {
+    init_timer();
+    init_dma();
+    init_sd();
+}
+
+// =============================================================================
+// Filesystem and State Management Functions  
+// =============================================================================
+
+bool init_sd() {
     FRESULT res = pf_mount(&fs);
     WDT::feed();
     
@@ -148,7 +183,7 @@ bool Controller::sd_init() {
     }
 
     // load config file
-    CFG.load_from_file("CONFIG.INI");
+    CFG.load_from_file(ConfigFileName);
 
     // apply static usb modes, if selected
     if (CFG.usb_mode == Config::UsbMode::AlwaysOn) {
@@ -157,292 +192,62 @@ bool Controller::sd_init() {
         GPIO::usb_power_off();
     }
 
-    if (CFG.light_mode != Config::LightMode::Disabled) {
-        change_main_state(Controller::MState::SENSOR);
-        change_playing_state(Controller::PState::PLAYING);
-        set_thresholds_for_state();
-    }
-    else {
-        change_main_state(Controller::MState::FORCED_OFF);
-    }
-
     // load playback state
     nv_state.load_from_file(StateFileName);
+    if (CFG.saving_enabled(Config::SaveState::SaveMode)) {
+        change_main_state(nv_state.mode);
+    }
+    else {
+        // do defaults
+        if (CFG.light_mode != Config::LightMode::Disabled) {
+            change_main_state(PlaybackState::Mode::SENSOR);
+        }
+        else {
+            change_main_state(PlaybackState::Mode::FORCED_OFF);
+        }
+    }
 
-    if (nv_state.is_random != CFG.random_mode) {
-        nv_state.regenerate();
-        nv_state.is_random = CFG.random_mode;
+    if (nv_state.mode == PlaybackState::Mode::SENSOR) {
+        change_playing_state(PState::PLAYING);
+        set_thresholds_for_state();
     }
 
     return true;
 }
 
-void Controller::mute() {
+// =============================================================================
+// Audio Control Functions
+// =============================================================================
+
+void start_playback() {
+    TIM1->CR1 |= TIM_CR1_CEN;         // Enable the timer
+}
+
+void stop_playback() {
+    TIM1->CR1 &= ~TIM_CR1_CEN;        // Disable the timer
+}
+
+void mute() {
     DMA1_Channel1->CMAR = (uint32_t)silence.data();
     DMA1_Channel2->CMAR = (uint32_t)silence.data();
 }
 
-void Controller::unmute() {
+void unmute() {
     DMA1_Channel1->CMAR = (uint32_t)pcml;
     DMA1_Channel2->CMAR = (uint32_t)pcmr;
 }
 
-void DMA1_Channel1_IRQHandler()
-{
-    // check interrupt source
-    if (DMA1->ISR & DMA_ISR_TCIF1) {
-        // clear interrupt flag
-        transfer_complete = true;
-        DMA1->IFCR |= DMA_IFCR_CTCIF1;
+
+uint32_t translate_track_number(uint32_t track) {
+    if (CFG.random_mode) {
+        return permute(track, nv_state.tracks_in_current_dir, nv_state.rand_key, 3);
     }
-    if (DMA1->ISR & DMA_ISR_HTIF1) {
-        // clear interrupt flag
-        half_transfer = true;
-        DMA1->IFCR |= DMA_IFCR_CHTIF1;
+    else {
+        return track;
     }
 }
 
-bool Controller::main() {
-    // list main directory
-    FRESULT res = pf_opendir(&main_dir, "/");
-    if (res != FR_OK) {
-        return false;
-    }
-
-    uint32_t dir_index = 0;
-
-    for (;;) {
-        res = pf_readdir(&main_dir, &current_file);
-
-        if (res != FR_OK) {
-            return false;
-        }
-
-        if (current_file.fname[0] == 0) {
-            break;
-        }
-
-        if (current_file.fattrib & AM_DIR) {
-            // If it's a directory, we can enter it
-
-            dir_index++;
-            if (nv_state.being_applied && dir_index < nv_state.current_dir_index) {
-                // skip to correct directory
-                continue;
-            }
-
-            res = pf_opendir(&sub_dir, current_file.fname);
-            if (res != FR_OK && res != FR_NO_FILE) {
-                return false;
-            }
-
-            if (res == FR_NO_FILE) {
-                continue;
-            }
-
-            if (CFG.random_mode) {
-                if (!random_playback()) {
-                    return false;
-                }
-            } else {
-                if (!sequential_playback()) {
-                    return false;
-                }
-            }
-        }
-    }
-
-    if (nv_state.being_applied && dir_index < nv_state.current_dir_index) {
-        // we reached end of main directory, but did not reach the last played directory
-        // this means that the last played directory was invalid so reset playback state
-        nv_state.being_applied = false;
-    }
-
-    return true;
-}
-
-bool Controller::sequential_playback() {
-
-    if (nv_state.being_applied) {
-        // todo: check if state can be applied
-        // previously saved state is valid
-        pf_readdir_n_element(&sub_dir, nv_state.current_track_index, &current_file);
-    }
-
-    while(1) {
-        if (playback_command == PlaybackCommand::PrevTrack && nv_state.current_track_index > 0) {
-            nv_state.current_track_index--;
-            pf_prevdir(&sub_dir);
-        }
-
-        FRESULT res = pf_readdir(&sub_dir, &current_file);
-
-        if (res != FR_OK && res != FR_NO_FILE) {
-            return false;
-        }
-
-        if (res == FR_NO_FILE || current_file.fname[0] == 0) {
-            break;
-        }
-
-        if (current_file.fattrib & AM_DIR) {
-            continue;
-        }
-        // Handle file
-        WDT::feed();
-        playback_command = PlaybackCommand::KeepPlaying;
-        
-        // save state before playing, do not write first time
-        if (!nv_state.being_applied && nv_state.has_file) {
-            nv_state.save_to_file(StateFileName);
-        }
-
-        if (nv_state.being_applied) {
-            // state loaded
-            nv_state.being_applied = false;
-        }
-
-        play_file(&current_file);
-        if (playback_command != PlaybackCommand::PrevTrack) {
-            nv_state.current_track_index++;
-        }
-
-        if (playback_command == PlaybackCommand::NextDirectory) {
-            break;
-        }
-    }
-
-    return true;
-}
-
-
-bool Controller::random_playback() {
-    uint32_t dir_index = 0;
-    auto count = pf_countindir(&sub_dir);
-
-    if (count == 0) {
-        // empty directory, skip
-        return true;
-    }
-
-    if (!nv_state.being_applied || (nv_state.tracks_in_current_dir != count) || (nv_state.current_track_index >= count)) {
-        // previously saved state is invalid
-        nv_state.regenerate();
-        nv_state.tracks_in_current_dir = count;
-        nv_state.current_dir_index = dir_index;
-    }
-    
-    while(1) {
-        if (playback_command == PlaybackCommand::PrevTrack && nv_state.current_track_index > 0) {
-            nv_state.current_track_index--;
-        }
-        // get randomized index
-        const uint32_t randomized = permute(nv_state.current_track_index, nv_state.tracks_in_current_dir, nv_state.rand_key, 3);
-
-        FRESULT res = pf_readdir_n_element(&sub_dir, randomized, &current_file);
-
-        if (res != FR_OK && res != FR_NO_FILE) {
-            return false;
-        }
-
-        if (res == FR_NO_FILE || current_file.fname[0] == 0) {
-            break;
-        }
-
-        if (current_file.fattrib & AM_DIR) {
-            continue;
-        }
-        // Handle file
-        WDT::feed();
-        playback_command = PlaybackCommand::KeepPlaying;
-
-        // save state before playing, do not write first time
-        if (!nv_state.being_applied && nv_state.has_file) {
-            nv_state.save_to_file(StateFileName);
-        }
-
-        if (nv_state.being_applied) {
-            // state loaded
-            nv_state.being_applied = false;
-        }
-        
-        play_file(&current_file);
-        if (playback_command != PlaybackCommand::PrevTrack) {
-            nv_state.current_track_index++;
-        }
-
-        if (playback_command == PlaybackCommand::NextDirectory) {
-            break;
-        }
-    }
-
-    return true;
-}
-
-
-
-inline __attribute__((always_inline)) UINT freadwrap(void* buff, UINT size) {
-    UINT br;
-    FRESULT res = pf_read_cached(buff, size, &br);
-    if (res != FR_OK) {
-        // Handle read error
-        while(1) { };
-    }
-
-    return br;
-}
-
-void ButtonPressCallback(BTN::ID id) {
-    Controller::on_button_press(id);
-}
-
-void LightSensorCallback(uint16_t value) {
-    Controller::on_light_sensor(value);
-}
-
-void Controller::on_button_press(BTN::ID id)
-{
-    switch (id) {
-        case BTN::ID::POWER:
-        {
-            MState new_state = static_cast<MState>((static_cast<int>(m_state) + 1) % static_cast<int>(MState::LAST_ELEMENT));
-
-            if (new_state == MState::SENSOR && CFG.light_mode == Config::LightMode::Disabled) {
-                // If light sensor is disabled, skip to FORCED_OFF state
-                new_state = MState::FORCED_ON;
-            }
-
-            change_main_state(new_state);
-            break;
-        }
-        case BTN::ID::NEXT_DIR:
-            playback_command = PlaybackCommand::NextDirectory;
-            break;
-        case BTN::ID::NEXT:
-            playback_command = PlaybackCommand::NextTrack;
-            break;
-        case BTN::ID::PREV:
-            playback_command = PlaybackCommand::PrevTrack;
-            break;
-    }
-}
-
-void Controller::on_light_sensor(uint16_t value)
-{
-    if (m_state == MState::SENSOR) {
-        if (value < CFG.on_threshold) {
-            // turn on
-            change_playing_state(CFG.light_mode == Config::LightMode::Normal ? PState::PLAYING : PState::NOT_PLAYING);
-        } else if (value > CFG.off_threshold) {
-            // turn off
-            change_playing_state(CFG.light_mode == Config::LightMode::Normal ? PState::NOT_PLAYING : PState::PLAYING);
-        }
-
-        set_thresholds_for_state();
-    }
-}
-
-void Controller::set_thresholds_for_state()
+void set_thresholds_for_state()
 {
     const bool arm_to_dim = (p_state == PState::PLAYING
             && CFG.light_mode == Config::LightMode::Normal)
@@ -459,28 +264,237 @@ void Controller::set_thresholds_for_state()
     }
 }
 
-void Controller::change_main_state(MState new_state)
-{
-    if (m_state == new_state) {
-        // No change needed
-        return;
+bool restore_state() {
+
+    bool state_restored = true;
+    while(1) {
+        if (CFG.saving_enabled(Config::SaveState::SaveDirectory) == false) {
+            state_restored = false;
+            break;
+        }
+
+        // skip to correct subdirctory
+        FRESULT res = pf_readdir_n_element(&main_dir, nv_state.current_dir_index, &current_file);
+        if (res != FR_OK) {
+            return false;
+        }
+
+        if (!(current_file.fattrib & AM_DIR)) {
+            return false;
+        }
+
+        res = pf_opendir(&sub_dir, current_file.fname);
+        if (res != FR_OK) {
+            return false;
+        }
+
+        // now jump to the file from state, if this is enabled in config
+        uint32_t count = pf_countindir(&sub_dir);
+
+        if (count != nv_state.tracks_in_current_dir || nv_state.tracks_in_current_dir == 0) {
+            state_restored = false;
+            break;
+        }
+
+        if (CFG.saving_enabled(Config::SaveState::SaveTrack)) {
+            uint32_t next_track = translate_track_number(nv_state.current_track_index);
+
+            res = pf_readdir_n_element(&sub_dir, next_track, &current_file);
+
+            if (res != FR_OK) {
+                return false;
+            }
+            subdir_iter = next_track;
+            break;
+        }
+        else {
+            nv_state.regenerate_key();
+            nv_state.current_track_index = 0;
+            // go to first track
+            if (!next_track()) {
+                return false;
+            }
+        }
     }
-    if (new_state == MState::FORCED_OFF) {
+
+    if (!state_restored) {
+        // rewind main dir
+        pf_readdir(&main_dir, nullptr);
+        // go to first dir
+        if (!next_dir()) {
+            return false;
+        }
+        // go to first track
+        if (!next_track()) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+// =============================================================================
+// Track Navigation Functions
+// =============================================================================
+
+bool next_track() {
+
+    while(1) {
+        if (++nv_state.current_track_index >= nv_state.tracks_in_current_dir) {
+            // reached end of dir
+            // TODO: decide what to do depending on config
+            nv_state.current_track_index = 0;
+            continue;
+        }
+
+        FRESULT res = FR_OK;
+        uint32_t next_track = translate_track_number(nv_state.current_track_index);
+
+        if (subdir_iter + 1 == next_track) {
+            // quick skip to next file
+            subdir_iter++;
+            res = pf_readdir(&sub_dir, &current_file);
+        }
+        else {
+            // slower seek to next file
+            res = pf_readdir_n_element(&sub_dir, next_track, &current_file);
+            subdir_iter = next_track;
+        }
+
+        if (res != FR_OK) {
+            return false;
+        }
+
+        if (!(current_file.fattrib & AM_DIR)) {
+            // found next file
+            break;
+        }
+    }
+
+    return true;
+}
+
+bool prev_track() {
+    if (nv_state.current_track_index > 0) {
+        nv_state.current_track_index--;
+    }
+
+    uint32_t track = translate_track_number(nv_state.current_track_index);
+
+    FRESULT res = pf_readdir_n_element(&sub_dir, track, &current_file);
+    subdir_iter = track;
+
+    if (res != FR_OK) {
+        return false;
+    }
+
+    return true;
+}
+
+bool next_dir() {
+    while(1) {
+        while(1) {
+            FRESULT res = pf_readdir(&main_dir, &current_file);
+            if (res != FR_OK) {
+                return false;
+            }
+
+            if (current_file.fname[0] == 0) {
+                // reached end of main dir
+                // rewind to start
+                if (pf_readdir(&main_dir, nullptr) != FR_OK) {
+                    return false;
+                }
+
+                nv_state.current_dir_index = 0;
+                continue;
+            }
+
+            nv_state.current_dir_index++;
+            if (current_file.fattrib & AM_DIR) {
+                // found next dir
+                break;
+            }
+        }
+
+        FRESULT res = pf_opendir(&sub_dir, current_file.fname);
+        if (res != FR_OK) {
+            return false;
+        }
+
+        nv_state.tracks_in_current_dir = pf_countindir(&sub_dir);
+        subdir_iter = 0;
+        nv_state.current_track_index = 0;
+        if (nv_state.tracks_in_current_dir > 0) {
+            break; // found directory with files
+        }
+    }
+    return true;
+}
+
+void on_button_press(BTN::ID id)
+{
+    switch (id) {
+        case BTN::ID::POWER:
+        {
+            PlaybackState::Mode new_state = static_cast<PlaybackState::Mode>((static_cast<int>(nv_state.mode) + 1) % static_cast<int>(PlaybackState::Mode::LAST_ELEMENT));
+
+            if (new_state == PlaybackState::Mode::SENSOR && CFG.light_mode == Config::LightMode::Disabled) {
+                // If light sensor is disabled, skip to FORCED_OFF state
+                new_state = PlaybackState::Mode::FORCED_ON;
+            }
+
+            change_main_state(new_state);
+            if (CFG.saving_enabled(Config::SaveState::SaveMode)) {
+                save_state_requested = true;
+            }
+            break;
+        }
+        case BTN::ID::NEXT_DIR:
+            playback_command = PlaybackCommand::NextDirectory;
+            break;
+        case BTN::ID::NEXT:
+            playback_command = PlaybackCommand::NextTrack;
+            break;
+        case BTN::ID::PREV:
+            playback_command = PlaybackCommand::PrevTrack;
+            break;
+    }
+}
+
+void on_light_sensor(uint16_t value)
+{
+    if (nv_state.mode == PlaybackState::Mode::SENSOR) {
+        if (value < CFG.on_threshold) {
+            // turn on
+            change_playing_state(CFG.light_mode == Config::LightMode::Normal ? PState::PLAYING : PState::NOT_PLAYING);
+        } else if (value > CFG.off_threshold) {
+            // turn off
+            change_playing_state(CFG.light_mode == Config::LightMode::Normal ? PState::NOT_PLAYING : PState::PLAYING);
+        }
+
+        set_thresholds_for_state();
+    }
+}
+
+void change_main_state(PlaybackState::Mode new_state)
+{
+    if (new_state == PlaybackState::Mode::FORCED_OFF) {
         LIGHT::stop();
         change_playing_state(PState::NOT_PLAYING);
-    } else if (new_state == MState::FORCED_ON) {
+    } else if (new_state == PlaybackState::Mode::FORCED_ON) {
         LIGHT::stop();
         change_playing_state(PState::PLAYING);
-    } else if (new_state == MState::SENSOR) {
+    } else if (new_state == PlaybackState::Mode::SENSOR) {
         // Handle sensor state, if needed
         set_thresholds_for_state();
         LIGHT::start();
     }
 
-    m_state = new_state;
+    nv_state.mode = new_state;
 }
 
-void Controller::change_playing_state(PState new_state)
+void change_playing_state(PState new_state)
 {
     if (p_state == new_state) {
         // No change needed
@@ -505,7 +519,75 @@ void Controller::change_playing_state(PState new_state)
     p_state = new_state;
 }
 
-void Controller::play_file(FILINFO *file)
+void __attribute__ ((noinline)) handle_state_save() {
+    // kinda ugly hack to avoid PetitFat forgetting about currently played file
+    FATFS petit_state;
+    pf_save_state(&petit_state);
+    nv_state.save_to_file(StateFileName);
+    pf_restore_state(&petit_state);
+    save_state_requested = false;
+}
+
+
+// =============================================================================
+// Playback loop
+// =============================================================================
+
+bool main() {
+    // list main directory
+    FRESULT res = pf_opendir(&main_dir, "/");
+    if (res != FR_OK) {
+        return false;
+    }
+
+    if (!restore_state()) {
+        return false;
+    }
+
+    for (;;) {
+
+        if (current_file.fname[0] == 0) {
+            break;
+        }
+
+        playback_command = PlaybackCommand::KeepPlaying;
+        play_file(&current_file);
+
+        bool next_directory = false;
+
+        if (playback_command == PlaybackCommand::PrevTrack) {
+            if (!prev_track()) {
+                return false;
+            }
+        }
+        else if (playback_command == PlaybackCommand::NextDirectory) {
+            if (!next_dir()) {
+                return false;
+            }
+
+            next_directory = true;
+
+            if (!next_track()) { // start from first track
+                return false;
+            }
+        }
+        else {
+            // normal next track
+            if (!next_track()) {
+                return false;
+            }
+        }
+
+        // save state
+        if (CFG.saving_enabled(Config::SaveState::SaveTrack) || (CFG.saving_enabled(Config::SaveState::SaveDirectory) && next_directory)) {
+            nv_state.save_to_file(StateFileName);
+        }
+    }
+
+    return true;
+}
+
+void play_file(FILINFO *file)
 {
     // Open file
     FRESULT res;
@@ -556,14 +638,22 @@ void Controller::play_file(FILINFO *file)
 
         if (left_part && pos >= CHANNEL_HALF_BUFFER) {
             // wait for transfer complete
-            while (!transfer_complete) { };
+            while (!transfer_complete) {
+                if (save_state_requested) {
+                    handle_state_save();
+                }
+            };
             transfer_complete = false;
 
         }
 
         if (pos >= CHANNEL_FULL_BUFFER) {
             // wait for half transfer
-            while (!half_transfer) { };
+            while (!half_transfer) {
+                if (save_state_requested) {
+                    handle_state_save();
+                }
+            };
             half_transfer = false;
             pos = 0;
         }
@@ -571,4 +661,24 @@ void Controller::play_file(FILINFO *file)
 
     while(playback_command == PlaybackCommand::KeepPlaying && freadwrap(data, SBC_PROBE_SIZE) >= 1 && sbc_probe(data, &frame) == 0);
     mute();
+}
+
+} // namespace Controller
+
+// =============================================================================
+// DMA Interrupt Handler
+// =============================================================================
+
+void DMA1_Channel1_IRQHandler() {
+    // Check for DMA1 Channel 1 Transfer Complete Interrupt
+    if (DMA1->ISR & DMA_ISR_TCIF1) {
+        Controller::transfer_complete = true;
+        DMA1->IFCR |= DMA_IFCR_CTCIF1;  // Clear interrupt flag
+    }
+    
+    // Check for DMA1 Channel 1 Half Transfer Interrupt
+    if (DMA1->ISR & DMA_ISR_HTIF1) {
+        Controller::half_transfer = true;
+        DMA1->IFCR |= DMA_IFCR_CHTIF1;  // Clear interrupt flag
+    }
 }

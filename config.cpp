@@ -84,7 +84,8 @@ Config::Config()
       off_threshold(0xcff),
       usb_mode(UsbMode::OnPlayback),
       fade_in(10),
-      fade_out(10)
+      fade_out(10),
+      save_state(SaveState::Disabled)
 {
 }
 
@@ -217,6 +218,25 @@ __attribute__((noinline)) bool Config::load_from_file(const char* filename) {
                     }
                     else if (strcmp(key, "fade_out") == 0) {
                         fade_out = static_cast<uint8_t>(atoi(value));
+                    }
+                    else if (strcmp(key, "save_directory") == 0) {
+                        bool enabled = (atoi(value) != 0);
+                        if (enabled) {
+                            enable_saving(SaveState::SaveDirectory);
+                        }
+                    }
+                    else if (strcmp(key, "save_track") == 0) {
+                        bool enabled = (atoi(value) != 0);
+                        if (enabled) {
+                            enable_saving(SaveState::SaveDirectory);
+                            enable_saving(SaveState::SaveTrack);
+                        }
+                    }
+                    else if (strcmp(key, "save_mode") == 0) {
+                        bool enabled = (atoi(value) != 0);
+                        if (enabled) {
+                            enable_saving(SaveState::SaveMode);
+                        }
                     }
                 }
             }

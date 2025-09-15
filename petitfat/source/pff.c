@@ -38,7 +38,7 @@
 #include "pff.h"		/* Petit FatFs configurations and declarations */
 #include "diskio.h"		/* Declarations of low level disk I/O functions */
 
-
+#include <string.h>
 
 /*--------------------------------------------------------------------------
 
@@ -884,6 +884,19 @@ FRESULT pf_mount (
 	return FR_OK;
 }
 
+FRESULT pf_save_state(FATFS* fs)
+{
+	if (!FatFs) return FR_NOT_ENABLED;
+	memcpy(fs, FatFs, sizeof(FATFS));
+	return FR_OK;
+}
+
+FRESULT pf_restore_state(FATFS* fs)
+{
+	memcpy(FatFs, fs, sizeof(FATFS));
+	return FR_OK;
+}
+
 FRESULT pf_build_cluster_cache (
 	CLUST cluster,	/* Start cluster number */
 	DWORD fsize	/* File size */
@@ -1342,6 +1355,8 @@ FRESULT pf_readdir_n_element (
 		}
 
 		get_fileinfo(dj, dir, fno);	/* Get the object information */
+		res = dir_next(dj);			/* Increment read index for next */
+		if (res == FR_NO_FILE) res = FR_OK;
 	}
 
 	return res;

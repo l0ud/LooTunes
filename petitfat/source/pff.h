@@ -141,6 +141,8 @@ FRESULT pf_readdir_n_element(DIR* dj, UINT n, FILINFO* fno);/* Read a specific d
 FRESULT pf_prevdir(DIR* dj);                                /* Move directory index to the previous item */
 UINT pf_countindir (DIR *dj); 							    /* Count files in the directory */
 
+FRESULT pf_save_state(FATFS* fs);                        /* Save current file system state */
+FRESULT pf_restore_state(FATFS* fs);                     /* Restore file system state */
 
 /*--------------------------------------------------------------*/
 /* Flags and offset address                                     */

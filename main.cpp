@@ -74,7 +74,7 @@ int main() {
   
   while(1) {
   if (!Controller::main()) { // false = error caused by file system / sd card
-    Controller::sd_init();
+    Controller::init_sd();
   }
   }
 

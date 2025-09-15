@@ -17,6 +17,14 @@ public:
         OnPlayback = 2
     };
 
+    // Bitmask for save options: track, directory, and mode
+    enum class SaveState : uint8_t {
+        Disabled      = 0x00,
+        SaveTrack     = 0x01,
+        SaveDirectory = 0x02,
+        SaveMode      = 0x04
+    };
+
     // Constructor
     Config();
 
@@ -32,6 +40,16 @@ public:
 
     uint8_t fade_in;            // Fade-in step time in ms
     uint8_t fade_out;           // Fade-out step time in ms
+
+    SaveState save_state;         // Bitmask for save options: track, directory, and mode
+
+    inline bool saving_enabled(SaveState mode) const {
+        return (static_cast<uint8_t>(save_state) & static_cast<uint8_t>(mode)) != 0;
+    }
+
+    inline void enable_saving(SaveState mode) {
+        save_state = static_cast<SaveState>(static_cast<uint8_t>(save_state) | static_cast<uint8_t>(mode));
+    }
 
     // Load configuration from file
     __attribute__((noinline)) bool load_from_file(const char* filename);
