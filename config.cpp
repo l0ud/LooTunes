@@ -203,9 +203,11 @@ __attribute__((noinline)) bool Config::load_from_file(const char* filename) {
                     }
                     else if (strcmp(key, "on_threshold") == 0) {
                         on_threshold = static_cast<uint16_t>(atoi(value));
+                        on_threshold = 0xfff - on_threshold; // invert threshold
                     }
                     else if (strcmp(key, "off_threshold") == 0) {
                         off_threshold = static_cast<uint16_t>(atoi(value));
+                        off_threshold = 0xfff - off_threshold; // invert threshold
                     }
                     else if (strcmp(key, "usb_mode") == 0) {
                         int v = atoi(value);
