@@ -72,6 +72,7 @@ void set_thresholds_for_state();
 
 void play_file(FILINFO *file);
 
+bool next_track_in_dir(bool &next_dir);
 bool next_track();
 bool prev_track();
 bool next_dir();
@@ -96,7 +97,7 @@ namespace {
     PlaybackState nv_state = {0};
     DIR main_dir = {0};
     DIR sub_dir = {0};
-    uint32_t subdir_iter = 0;
+    uint32_t subdir_iter = -1;
     FILINFO current_file = {0};
 }
 
@@ -193,7 +194,13 @@ bool init_sd() {
     }
 
     // load playback state
-    nv_state.load_from_file(StateFileName);
+
+    if (!nv_state.load_from_file(StateFileName)) {
+        // failed to load state, reset to defaults
+        nv_state.regenerate();
+        CFG.save_state = Config::SaveState::Disabled; // disable saving state if loading failed
+    }
+
     if (CFG.saving_enabled(Config::SaveState::SaveMode)) {
         change_main_state(nv_state.mode);
     }
@@ -264,6 +271,21 @@ void set_thresholds_for_state()
     }
 }
 
+bool next_track() {
+    bool next_dir_requested = false;
+    do {
+        next_track_in_dir(next_dir_requested);
+        if (next_dir_requested) {
+            if (!next_dir()) {
+                return false;
+            }
+        }
+    }
+    while(next_dir_requested);
+
+    return true;
+}
+
 bool restore_state() {
 
     bool state_restored = true;
@@ -275,6 +297,10 @@ bool restore_state() {
 
         // skip to correct subdirctory
         FRESULT res = pf_readdir_n_element(&main_dir, nv_state.current_dir_index, &current_file);
+        if (res == FR_NO_FILE) {
+            state_restored = false;
+            break;
+        }
         if (res != FR_OK) {
             return false;
         }
@@ -300,6 +326,10 @@ bool restore_state() {
             uint32_t next_track = translate_track_number(nv_state.current_track_index);
 
             res = pf_readdir_n_element(&sub_dir, next_track, &current_file);
+            if (res == FR_NO_FILE) {
+                state_restored = false;
+                break;
+            }
 
             if (res != FR_OK) {
                 return false;
@@ -309,7 +339,7 @@ bool restore_state() {
         }
         else {
             nv_state.regenerate_key();
-            nv_state.current_track_index = 0;
+            nv_state.current_track_index = -1;
             // go to first track
             if (!next_track()) {
                 return false;
@@ -318,6 +348,7 @@ bool restore_state() {
     }
 
     if (!state_restored) {
+        nv_state.regenerate();
         // rewind main dir
         pf_readdir(&main_dir, nullptr);
         // go to first dir
@@ -337,13 +368,18 @@ bool restore_state() {
 // Track Navigation Functions
 // =============================================================================
 
-bool next_track() {
+bool next_track_in_dir(bool &next_dir) {
 
     while(1) {
         if (++nv_state.current_track_index >= nv_state.tracks_in_current_dir) {
             // reached end of dir
-            // TODO: decide what to do depending on config
-            nv_state.current_track_index = 0;
+            // decide what to do depending on config
+            if (CFG.jump_next_dir) {
+                next_dir = true; // signal to caller to jump to next dir
+                return true;
+            }
+
+            nv_state.current_track_index = -1;
             continue;
         }
 
@@ -406,7 +442,7 @@ bool next_dir() {
                     return false;
                 }
 
-                nv_state.current_dir_index = 0;
+                nv_state.current_dir_index = -1;
                 continue;
             }
 
@@ -423,8 +459,8 @@ bool next_dir() {
         }
 
         nv_state.tracks_in_current_dir = pf_countindir(&sub_dir);
-        subdir_iter = 0;
-        nv_state.current_track_index = 0;
+        subdir_iter = -1;
+        nv_state.current_track_index = -1;
         if (nv_state.tracks_in_current_dir > 0) {
             break; // found directory with files
         }

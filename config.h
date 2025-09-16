@@ -43,6 +43,8 @@ public:
 
     SaveState save_state;         // Bitmask for save options: track, directory, and mode
 
+    uint8_t jump_next_dir;
+
     inline bool saving_enabled(SaveState mode) const {
         return (static_cast<uint8_t>(save_state) & static_cast<uint8_t>(mode)) != 0;
     }

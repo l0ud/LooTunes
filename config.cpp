@@ -85,7 +85,8 @@ Config::Config()
       usb_mode(UsbMode::OnPlayback),
       fade_in(10),
       fade_out(10),
-      save_state(SaveState::Disabled)
+      save_state(SaveState::Disabled),
+      jump_next_dir(0)
 {
 }
 
@@ -239,6 +240,9 @@ __attribute__((noinline)) bool Config::load_from_file(const char* filename) {
                         if (enabled) {
                             enable_saving(SaveState::SaveMode);
                         }
+                    }
+                    else if (strcmp(key, "jump_next_dir") == 0) {
+                        jump_next_dir = static_cast<uint8_t>(atoi(value));
                     }
                 }
             }

@@ -5,7 +5,6 @@ bool PlaybackState::load_from_file(const char* filename) {
     // Open file
     FRESULT res = pf_open(filename);
     if (res != FR_OK) {
-        has_file = false;
         return false;
     }
 
@@ -16,19 +15,13 @@ bool PlaybackState::load_from_file(const char* filename) {
     pf_read(&rand_key, sizeof(rand_key), &br);
     pf_read(&tracks_in_current_dir, sizeof(tracks_in_current_dir), &br);
     pf_read(&mode, sizeof(mode), &br);
-    has_file = true;
     return true;
 }
 
 bool PlaybackState::save_to_file(const char* filename) {
-    if (!has_file) {
-        return false;
-    }
-
     // Open file
     FRESULT res = pf_open(filename);
     if (res != FR_OK) {
-        has_file = false;
         return false;
     }
 
@@ -45,8 +38,8 @@ bool PlaybackState::save_to_file(const char* filename) {
 }
 
 void PlaybackState::regenerate() {
-    current_dir_index = 0;
-    current_track_index = 0;
+    current_dir_index = -1;
+    current_track_index = -1;
     tracks_in_current_dir = 0;
     regenerate_key();
 }

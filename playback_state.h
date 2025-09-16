@@ -7,7 +7,6 @@ struct PlaybackState {
     uint32_t current_track_index;
     uint32_t rand_key;
     uint32_t tracks_in_current_dir;
-    bool has_file;
 
     enum class Mode {
         SENSOR, // light sensor state
