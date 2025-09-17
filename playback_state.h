@@ -17,6 +17,6 @@ struct PlaybackState {
 
     bool load_from_file(const char* filename);
     bool save_to_file(const char* filename);
-    void regenerate();
-    void regenerate_key();
+    void regenerate(uint32_t seed);
+    void regenerate_key(uint32_t seed);
 };

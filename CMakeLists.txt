@@ -27,6 +27,7 @@ set(PROJECT_FILES
         light_sensor.cpp
         playback_state.cpp
         feistel.cpp
+        random.cpp
         libsbc/src/sbc.c
         libsbc/src/bits.c
         petitfat/source/diskio.c

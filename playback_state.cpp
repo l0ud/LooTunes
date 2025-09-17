@@ -1,5 +1,6 @@
 #include "playback_state.h"
 #include "petitfat/source/pff.h"
+#include "random.h"
 
 bool PlaybackState::load_from_file(const char* filename) {
     // Open file
@@ -37,13 +38,18 @@ bool PlaybackState::save_to_file(const char* filename) {
     return true;
 }
 
-void PlaybackState::regenerate() {
+void PlaybackState::regenerate(uint32_t seed) {
     current_dir_index = -1;
     current_track_index = -1;
     tracks_in_current_dir = 0;
-    regenerate_key();
+    regenerate_key(seed);
 }
 
-void PlaybackState::regenerate_key() {
-    rand_key = 0xDEADBEEF; // or some other default seed
+void PlaybackState::regenerate_key(uint32_t seed) {
+    if (seed) {
+        rand_key = seed;
+    }
+    else {
+        rand_key = RAND::next();
+    }
 }

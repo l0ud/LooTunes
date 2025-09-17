@@ -11,6 +11,7 @@ extern "C" {
 #include "playback.h"
 #include "watchdog.h"
 #include "light_sensor.h"
+#include "random.h"
 
 void SysTick_Handler(void) { HAL_IncTick(); }
 
@@ -61,6 +62,7 @@ void SystemClock_Config(void) {
 int main() {
   HAL_Init();
   HAL_SuspendTick();
+  RAND::init();
   SystemClock_Config();
   //WDT::init();
 

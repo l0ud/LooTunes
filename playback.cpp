@@ -195,9 +195,9 @@ bool init_sd() {
 
     // load playback state
 
-    if (!nv_state.load_from_file(StateFileName)) {
-        // failed to load state, reset to defaults
-        nv_state.regenerate();
+    if (CFG.save_state == Config::SaveState::Disabled || !nv_state.load_from_file(StateFileName)) {
+        // failed to load state / state disabled, reset to defaults
+        nv_state.regenerate(CFG.seed);
         CFG.save_state = Config::SaveState::Disabled; // disable saving state if loading failed
     }
 
@@ -295,6 +295,13 @@ bool restore_state() {
             break;
         }
 
+        if (CFG.seed && nv_state.rand_key != CFG.seed) {
+            // if seed defined by user and different, for convenience reset state
+            // to avoid confusion
+            state_restored = false;
+            break;
+        }
+
         // skip to correct subdirctory
         FRESULT res = pf_readdir_n_element(&main_dir, nv_state.current_dir_index, &current_file);
         if (res == FR_NO_FILE) {
@@ -338,7 +345,8 @@ bool restore_state() {
             break;
         }
         else {
-            nv_state.regenerate_key();
+            // get random key as track saving is not enabled
+            nv_state.regenerate_key(CFG.seed);
             nv_state.current_track_index = -1;
             // go to first track
             if (!next_track()) {
@@ -348,7 +356,7 @@ bool restore_state() {
     }
 
     if (!state_restored) {
-        nv_state.regenerate();
+        nv_state.regenerate(CFG.seed);
         // rewind main dir
         pf_readdir(&main_dir, nullptr);
         // go to first dir
@@ -459,12 +467,14 @@ bool next_dir() {
         }
 
         nv_state.tracks_in_current_dir = pf_countindir(&sub_dir);
-        subdir_iter = -1;
-        nv_state.current_track_index = -1;
         if (nv_state.tracks_in_current_dir > 0) {
             break; // found directory with files
         }
     }
+
+    subdir_iter = -1;
+    nv_state.current_track_index = -1;
+    nv_state.regenerate_key(CFG.seed);
     return true;
 }
 
