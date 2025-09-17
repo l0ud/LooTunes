@@ -566,12 +566,14 @@ void change_playing_state(PState new_state)
 }
 
 void __attribute__ ((noinline)) handle_state_save() {
+    mute();
     // kinda ugly hack to avoid PetitFat forgetting about currently played file
     FATFS petit_state;
     pf_save_state(&petit_state);
     nv_state.save_to_file(StateFileName);
     pf_restore_state(&petit_state);
     save_state_requested = false;
+    unmute();
 }
 
 
