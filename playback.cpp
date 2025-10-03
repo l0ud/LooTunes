@@ -16,6 +16,8 @@ extern "C" {
     #include "defines.h"
     #include "py32f0xx.h"
     #include "py32f0xx_hal.h"
+
+    uint8_t VolumeShift = 0;
 }
 
 // Global callback functions for external C interfaces
@@ -41,9 +43,9 @@ constexpr auto CHANNEL_HALF_BUFFER = SBC_MAX_SAMPLES; // 128
 constexpr auto CHANNEL_FULL_BUFFER = CHANNEL_HALF_BUFFER * 2; // 256
 
 // Timer configuration
-constexpr uint32_t TIM_PERIOD_48KHZ = 250 - 1;   // 192 kHz PWM frequency
-constexpr uint32_t TIM_PERIOD_441KHZ = 272 - 1;  // 176.4 kHz PWM frequency
-constexpr uint32_t REPEAT_COUNT = 3;              // Update every 4 PWM cycles (RCR + 1 = 4)
+constexpr uint32_t TIM_PERIOD_48KHZ = (250 - 1)*4;   // 192 kHz PWM frequency
+constexpr uint32_t TIM_PERIOD_441KHZ = (272 - 1)*4;  // 176.4 kHz PWM frequency
+constexpr uint32_t REPEAT_COUNT = 0;              // Update every 4 PWM cycles (RCR + 1 = 4)
 
 
 // =============================================================================
@@ -82,7 +84,7 @@ namespace {
     int16_t pcml[CHANNEL_FULL_BUFFER] = {0};
     int16_t pcmr[CHANNEL_FULL_BUFFER] = {0};
     uint8_t data[SBC_MAX_SAMPLES*sizeof(int16_t)] = {0};
-    constexpr auto silence = make_filled_array<int16_t, CHANNEL_FULL_BUFFER, 136>();
+    constexpr auto silence = make_filled_array<int16_t, CHANNEL_FULL_BUFFER, (136*4)>();
 
     FATFS fs;
 
