@@ -21,7 +21,9 @@ set(PROJECT_FILES
         main.cpp
         sd.cpp
         gpio.cpp
-        playback.cpp
+        controller.cpp
+        file_navigator.cpp
+        audio_player.cpp
         button.cpp
         config.cpp
         light_sensor.cpp

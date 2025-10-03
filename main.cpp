@@ -8,7 +8,7 @@ extern "C" {
 #include "gpio.h"
 #include "sd.h"
 #include "button.h"
-#include "playback.h"
+#include "controller.h"
 #include "watchdog.h"
 #include "light_sensor.h"
 #include "random.h"

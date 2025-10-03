@@ -57,7 +57,6 @@ public:
     __attribute__((noinline)) bool load_from_file(const char* filename);
 
 private:
-    // Optional: helper methods for parsing
 };
 
 extern Config CFG;

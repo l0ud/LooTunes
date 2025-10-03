@@ -1,5 +1,7 @@
 #pragma once
 
+#include <array>
+
 template <typename T, std::size_t N, T Value>
 constexpr auto make_filled_array() {
     std::array<T, N> arr{};
