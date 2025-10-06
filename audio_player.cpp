@@ -66,8 +66,8 @@ void init_timer() {
     // Configure TIM1 as PWM output
     TIM1->PSC = 0;                     // No prescaler (48 MHz clock)
     TIM1->ARR = TIM_PERIOD_441KHZ;     // Set Auto-Reload Register for desired frequency
-    TIM1->CCR2 = 0;                    // Set initial duty cycle to 0
-    TIM1->CCR3 = 0;                    // Set initial duty cycle to 0
+    TIM1->CCR2 = silence[0];                    // Set initial duty cycle to silence
+    TIM1->CCR3 = silence[0];                    // Set initial duty cycle to silence
     TIM1->RCR = REPEAT_COUNT;          // Update every 4 PWM cycles
 
     TIM1->CCMR1 |= TIM_CCMR1_OC2M_2 | TIM_CCMR1_OC2M_1;  // PWM Mode 1 (110)
@@ -77,6 +77,8 @@ void init_timer() {
     TIM1->DIER |= TIM_DIER_UDE;                   // Enable Update DMA Request
     TIM1->BDTR |= TIM_BDTR_MOE;                   // Main Output Enable
     TIM1->CR1 = TIM_CR1_ARPE;                     // Enable timer AUTO PRELOAD
+
+    TIM1->CR1 |= TIM_CR1_CEN;         // Enable the timer
 }
 
 void init_dma() {
@@ -88,60 +90,56 @@ void init_dma() {
                         SYSCFG_CFGR3_DMA2_ACKLVL | SYSCFG_CFGR3_DMA1_ACKLVL;
 
     // Configure DMA Channel 1 (Left channel)
-    DMA1_Channel1->CCR &= ~DMA_CCR_EN;
+    DMA1_Channel1->CCR = 0;
     DMA1_Channel1->CNDTR = CHANNEL_FULL_BUFFER;
     DMA1_Channel1->CPAR = (uint32_t)&TIM1->CCR2;
     DMA1_Channel1->CMAR = (uint32_t)pcml;
-    
-    DMA1_Channel1->CCR |= DMA_CCR_MINC |      // Memory increment mode
-                            DMA_CCR_DIR |       // Memory-to-peripheral direction
-                            DMA_CCR_MSIZE_0 |   // Memory size: 16-bit
-                            DMA_CCR_PSIZE_0 |   // Peripheral size: 16-bit
-                            DMA_CCR_CIRC |      // Circular mode
-                            DMA_CCR_HTIE |      // Half transfer interrupt
-                            DMA_CCR_TCIE;       // Transfer complete interrupt
+
+    const uint32_t ccr1 = DMA_CCR_MINC |      // Memory increment mode
+                            DMA_CCR_DIR |     // Memory-to-peripheral direction
+                            DMA_CCR_MSIZE_0 | // Memory size: 16-bit
+                            DMA_CCR_PSIZE_0 | // Peripheral size: 16-bit
+                            DMA_CCR_CIRC |    // Circular mode
+                            DMA_CCR_HTIE |    // Half transfer interrupt
+                            DMA_CCR_TCIE |    // Transfer complete interrupt
+                            DMA_CCR_EN;       // Enable channel
 
     // Configure DMA Channel 2 (Right channel)
     DMA1_Channel2->CCR &= ~DMA_CCR_EN;
     DMA1_Channel2->CNDTR = CHANNEL_FULL_BUFFER;
     DMA1_Channel2->CPAR = (uint32_t)&TIM1->CCR3;
     DMA1_Channel2->CMAR = (uint32_t)pcmr;
-    
-    DMA1_Channel2->CCR |= DMA_CCR_MINC |      // Memory increment mode
-                            DMA_CCR_DIR |       // Memory-to-peripheral direction
-                            DMA_CCR_MSIZE_0 |   // Memory size: 16-bit
-                            DMA_CCR_PSIZE_0 |   // Peripheral size: 16-bit
-                            DMA_CCR_CIRC;       // Circular mode
+
+    const uint32_t ccr2 = DMA_CCR_MINC |      // Memory increment mode
+                            DMA_CCR_DIR |     // Memory-to-peripheral direction
+                            DMA_CCR_MSIZE_0 | // Memory size: 16-bit
+                            DMA_CCR_PSIZE_0 | // Peripheral size: 16-bit
+                            DMA_CCR_CIRC |    // Circular mode
+                            DMA_CCR_EN;       // Enable channel
 
     // Enable DMA channels and interrupt
     NVIC_EnableIRQ(DMA1_Channel1_IRQn);
-    DMA1_Channel1->CCR |= DMA_CCR_EN;
-    DMA1_Channel2->CCR |= DMA_CCR_EN;
+    DMA1_Channel1->CCR = ccr1;
+    DMA1_Channel2->CCR = ccr2;
 }
 
 void init() {
-    init_timer();
     init_dma();
+    init_timer();
 }
 
 // =============================================================================
 // Playback Control
 // =============================================================================
 
-void start_playback() {
-    TIM1->CR1 |= TIM_CR1_CEN;         // Enable the timer
-}
-
-void stop_playback() {
-    TIM1->CR1 &= ~TIM_CR1_CEN;        // Disable the timer
-}
-
 void mute() {
+    NVIC_DisableIRQ(DMA1_Channel1_IRQn);
     DMA1_Channel1->CMAR = (uint32_t)silence.data();
     DMA1_Channel2->CMAR = (uint32_t)silence.data();
 }
 
 void unmute() {
+    NVIC_EnableIRQ(DMA1_Channel1_IRQn);
     DMA1_Channel1->CMAR = (uint32_t)pcml;
     DMA1_Channel2->CMAR = (uint32_t)pcmr;
 }

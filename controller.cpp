@@ -9,7 +9,7 @@
 extern "C" {
     #include "defines.h"
 
-    uint8_t VolumeShift = 0;
+    volatile uint8_t VolumeShift = 0;
 }
 
 // Global callback functions for external C interfaces
@@ -30,8 +30,10 @@ namespace Controller {
 using AudioPlayer::PlaybackCommand;
 
 enum class PState {
-    NOT_PLAYING,
-    PLAYING,
+    NotPlaying,
+    FadeOut,
+    FadeIn,
+    Playing,
 };
 
 // =============================================================================
@@ -39,12 +41,12 @@ enum class PState {
 // =============================================================================
 
 void change_main_state(PlaybackState::Mode new_state);
-void change_playing_state(PState new_state);
+void change_playing_state(PState new_state, bool force = false);
 void set_thresholds_for_state();
 
 namespace {
     // Playback state
-    PState p_state = PState::NOT_PLAYING;
+    PState p_state = PState::NotPlaying;
 }
 
 // =============================================================================
@@ -53,6 +55,46 @@ namespace {
 
 void init() {
     AudioPlayer::init();
+
+
+    // initialize timer used for fade in and out
+    __HAL_RCC_TIM16_CLK_ENABLE();
+    // 1ms time base
+    TIM16->PSC = (INPUT_FREQUENCY / 1000) - 1;
+    // enable update interrupt
+    TIM16->DIER |= TIM_DIER_UIE;
+    NVIC_EnableIRQ(TIM16_IRQn);
+    // don't start yet
+    TIM16->CR1 = 0;
+}
+
+void fade_handler() {
+    if (p_state == PState::FadeIn) {
+        if (VolumeShift > 0) {
+            VolumeShift = VolumeShift - 1;
+        }
+        else {
+            // done
+            TIM16->CR1 &= ~TIM_CR1_CEN; // stop timer
+            Controller::change_playing_state(Controller::PState::Playing, true);
+        }
+    }
+    else if (p_state == Controller::PState::FadeOut) {
+        if (VolumeShift < 10) {
+            VolumeShift = VolumeShift + 1;
+        }
+        else {
+            // done
+            TIM16->CR1 &= ~TIM_CR1_CEN; // stop timer
+            Controller::change_playing_state(Controller::PState::NotPlaying, true);
+        }
+    }
+}
+
+void arm_fade_timer(uint8_t period_ms) {
+    TIM16->CNT = 0;
+    TIM16->ARR = period_ms;
+    TIM16->CR1 |= TIM_CR1_CEN; // start timer
 }
 
 bool init_sd() {
@@ -68,15 +110,15 @@ bool init_sd() {
     else {
         // do defaults
         if (CFG.light_mode != Config::LightMode::Disabled) {
-            change_main_state(PlaybackState::Mode::SENSOR);
+            change_main_state(PlaybackState::Mode::Sensor);
         }
         else {
-            change_main_state(PlaybackState::Mode::FORCED_OFF);
+            change_main_state(PlaybackState::Mode::ForcedOff);
         }
     }
 
-    if (nv_state.mode == PlaybackState::Mode::SENSOR) {
-        change_playing_state(PState::PLAYING);
+    if (nv_state.mode == PlaybackState::Mode::Sensor) {
+        change_playing_state(PState::Playing);
         set_thresholds_for_state();
     }
 
@@ -89,9 +131,9 @@ bool init_sd() {
 
 void set_thresholds_for_state()
 {
-    const bool arm_to_dim = (p_state == PState::PLAYING
+    const bool arm_to_dim = (p_state >= PState::FadeIn // playing or fade in
             && CFG.light_mode == Config::LightMode::Normal)
-            || (p_state == PState::NOT_PLAYING
+            || (p_state <= PState::FadeOut // not playing or fade out
             && CFG.light_mode == Config::LightMode::Reversed);
     // closer to 0 the sensor value is, the more light is present
     if (arm_to_dim) {
@@ -111,11 +153,11 @@ void on_button_press(BTN::ID id)
     switch (id) {
         case BTN::ID::POWER:
         {
-            PlaybackState::Mode new_state = static_cast<PlaybackState::Mode>((static_cast<int>(nv_state.mode) + 1) % static_cast<int>(PlaybackState::Mode::LAST_ELEMENT));
+            PlaybackState::Mode new_state = static_cast<PlaybackState::Mode>((static_cast<int>(nv_state.mode) + 1) % static_cast<int>(PlaybackState::Mode::LastElement));
 
-            if (new_state == PlaybackState::Mode::SENSOR && CFG.light_mode == Config::LightMode::Disabled) {
-                // If light sensor is disabled, skip to FORCED_OFF state
-                new_state = PlaybackState::Mode::FORCED_ON;
+            if (new_state == PlaybackState::Mode::Sensor && CFG.light_mode == Config::LightMode::Disabled) {
+                // If light sensor is disabled, skip to ForcedOff state
+                new_state = PlaybackState::Mode::ForcedOn;
             }
 
             change_main_state(new_state);
@@ -140,13 +182,13 @@ void on_light_sensor(uint16_t value)
 {
     PlaybackState& nv_state = FileNavigator::get_state();
     
-    if (nv_state.mode == PlaybackState::Mode::SENSOR) {
+    if (nv_state.mode == PlaybackState::Mode::Sensor) {
         if (value < CFG.on_threshold) {
             // turn on
-            change_playing_state(CFG.light_mode == Config::LightMode::Normal ? PState::PLAYING : PState::NOT_PLAYING);
+            change_playing_state(CFG.light_mode == Config::LightMode::Normal ? PState::Playing : PState::NotPlaying);
         } else if (value > CFG.off_threshold) {
             // turn off
-            change_playing_state(CFG.light_mode == Config::LightMode::Normal ? PState::NOT_PLAYING : PState::PLAYING);
+            change_playing_state(CFG.light_mode == Config::LightMode::Normal ? PState::NotPlaying : PState::Playing);
         }
 
         set_thresholds_for_state();
@@ -157,13 +199,13 @@ void change_main_state(PlaybackState::Mode new_state)
 {
     PlaybackState& nv_state = FileNavigator::get_state();
     
-    if (new_state == PlaybackState::Mode::FORCED_OFF) {
+    if (new_state == PlaybackState::Mode::ForcedOff) {
         LIGHT::stop();
-        change_playing_state(PState::NOT_PLAYING);
-    } else if (new_state == PlaybackState::Mode::FORCED_ON) {
+        change_playing_state(PState::NotPlaying, CFG.instant_mode_change != 0);
+    } else if (new_state == PlaybackState::Mode::ForcedOn) {
         LIGHT::stop();
-        change_playing_state(PState::PLAYING);
-    } else if (new_state == PlaybackState::Mode::SENSOR) {
+        change_playing_state(PState::Playing, CFG.instant_mode_change != 0);
+    } else if (new_state == PlaybackState::Mode::Sensor) {
         // Handle sensor state, if needed
         set_thresholds_for_state();
         LIGHT::start();
@@ -172,26 +214,56 @@ void change_main_state(PlaybackState::Mode new_state)
     nv_state.mode = new_state;
 }
 
-void change_playing_state(PState new_state)
+void change_playing_state(PState new_state, bool force)
 {
     if (p_state == new_state) {
         // No change needed
         return;
     }
-    if (new_state == PState::NOT_PLAYING) {
+
+    if (!force) { // make changes soft
+        if (CFG.fade_out != 0 && new_state == PState::NotPlaying) {
+            // fade out
+            new_state = PState::FadeOut;
+        }
+
+        if (CFG.fade_in != 0 && new_state == PState::Playing) {
+            // fade in
+            new_state = PState::FadeIn;
+        }
+    }
+
+
+    if (new_state == PState::NotPlaying) {
         GPIO::led_off();
 
         if (CFG.usb_mode == Config::UsbMode::OnPlayback) {
             GPIO::usb_power_off();
         }
-        AudioPlayer::stop_playback();
-    } else if (new_state == PState::PLAYING) {
+        AudioPlayer::mute();
+        VolumeShift = 10; // prepare shift for potential fade in
+    }
+    else if (new_state == PState::FadeIn || new_state == PState::Playing)  {
         GPIO::led_on();
 
         if (CFG.usb_mode == Config::UsbMode::OnPlayback) {
             GPIO::usb_power_on();
         }
-        AudioPlayer::start_playback();
+        AudioPlayer::unmute();
+        
+        if (new_state == PState::FadeIn) {
+            // Start fade-in timer
+            arm_fade_timer(CFG.fade_in);
+        }
+        else {
+            VolumeShift = 0; // instant on
+        }
+    }
+    else if (new_state == PState::FadeOut) {
+        // keep USB on during fade out, but not led
+        GPIO::led_off();
+        // Start fade-out timer
+        arm_fade_timer(CFG.fade_out);
     }
 
     p_state = new_state;
@@ -261,3 +333,10 @@ bool main() {
 }
 
 } // namespace Controller
+
+void TIM16_IRQHandler() {
+    if (TIM16->SR & TIM_SR_UIF) {
+        TIM16->SR &= ~TIM_SR_UIF; // clear interrupt flag
+        Controller::fade_handler();
+    }
+}

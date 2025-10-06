@@ -36,22 +36,12 @@ void init_timer();
 void init_dma();
 
 /**
- * @brief Start audio playback (enable timer)
- */
-void start_playback();
-
-/**
- * @brief Stop audio playback (disable timer)
- */
-void stop_playback();
-
-/**
- * @brief Mute audio output (switch to silence buffer)
+ * @brief Mute audio output (stop DMA and set to silence)
  */
 void mute();
 
 /**
- * @brief Unmute audio output (switch to PCM buffers)
+ * @brief Unmute audio output (resume DMA)
  */
 void unmute();
 

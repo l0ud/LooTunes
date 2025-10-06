@@ -9,10 +9,10 @@ struct PlaybackState {
     uint32_t tracks_in_current_dir;
 
     enum class Mode {
-        SENSOR, // light sensor state
-        FORCED_ON,
-        FORCED_OFF, // forced off state
-        LAST_ELEMENT // marker for calculation
+        Sensor, // light sensor state
+        ForcedOn,
+        ForcedOff, // forced off state
+        LastElement // marker for calculation
     } mode;
 
     bool load_from_file(const char* filename);

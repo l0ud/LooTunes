@@ -83,10 +83,11 @@ Config::Config()
       on_threshold(0xaff),
       off_threshold(0xcff),
       usb_mode(UsbMode::OnPlayback),
-      fade_in(10),
-      fade_out(10),
+      fade_in(50),
+      fade_out(100),
       save_state(SaveState::Disabled),
-      jump_next_dir(0)
+      jump_next_dir(0),
+      instant_mode_change(0)
 {
 }
 
@@ -243,6 +244,9 @@ __attribute__((noinline)) bool Config::load_from_file(const char* filename) {
                     }
                     else if (strcmp(key, "jump_next_dir") == 0) {
                         jump_next_dir = static_cast<uint8_t>(atoi(value));
+                    }
+                    else if (strcmp(key, "instant_mode_change") == 0) {
+                        instant_mode_change = static_cast<uint8_t>(atoi(value));
                     }
                 }
             }

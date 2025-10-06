@@ -45,6 +45,8 @@ public:
 
     uint8_t jump_next_dir;
 
+    uint8_t instant_mode_change;
+
     inline bool saving_enabled(SaveState mode) const {
         return (static_cast<uint8_t>(save_state) & static_cast<uint8_t>(mode)) != 0;
     }
