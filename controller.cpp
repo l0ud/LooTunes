@@ -30,6 +30,7 @@ namespace Controller {
 using AudioPlayer::PlaybackCommand;
 
 enum class PState {
+    Invalid,
     NotPlaying,
     FadeOut,
     FadeIn,
@@ -55,7 +56,6 @@ namespace {
 
 void init() {
     AudioPlayer::init();
-
 
     // initialize timer used for fade in and out
     __HAL_RCC_TIM16_CLK_ENABLE();
@@ -98,6 +98,11 @@ void arm_fade_timer(uint8_t period_ms) {
 }
 
 bool init_sd() {
+    // re-initialize mute state after SD card init
+    AudioPlayer::reset_mute();
+    // reset playback state, needs to be loaded
+    p_state = PState::Invalid;
+
     if (!FileNavigator::init()) {
         return false;
     }
@@ -115,11 +120,6 @@ bool init_sd() {
         else {
             change_main_state(PlaybackState::Mode::ForcedOff);
         }
-    }
-
-    if (nv_state.mode == PlaybackState::Mode::Sensor) {
-        change_playing_state(PState::Playing);
-        set_thresholds_for_state();
     }
 
     return true;
@@ -198,7 +198,7 @@ void on_light_sensor(uint16_t value)
 void change_main_state(PlaybackState::Mode new_state)
 {
     PlaybackState& nv_state = FileNavigator::get_state();
-    
+
     if (new_state == PlaybackState::Mode::ForcedOff) {
         LIGHT::stop();
         change_playing_state(PState::NotPlaying, CFG.instant_mode_change != 0);
@@ -207,6 +207,12 @@ void change_main_state(PlaybackState::Mode new_state)
         change_playing_state(PState::Playing, CFG.instant_mode_change != 0);
     } else if (new_state == PlaybackState::Mode::Sensor) {
         // Handle sensor state, if needed
+
+        // special case - initializing for first time after reset
+        if (p_state == PState::Invalid) {
+            // start in not playing state
+            change_playing_state(PState::NotPlaying, true);
+        }
         set_thresholds_for_state();
         LIGHT::start();
     }
@@ -240,7 +246,7 @@ void change_playing_state(PState new_state, bool force)
         if (CFG.usb_mode == Config::UsbMode::OnPlayback) {
             GPIO::usb_power_off();
         }
-        AudioPlayer::mute();
+        AudioPlayer::mute(); // this will create state-related mute lock
         VolumeShift = 10; // prepare shift for potential fade in
     }
     else if (new_state == PState::FadeIn || new_state == PState::Playing)  {
@@ -249,8 +255,7 @@ void change_playing_state(PState new_state, bool force)
         if (CFG.usb_mode == Config::UsbMode::OnPlayback) {
             GPIO::usb_power_on();
         }
-        AudioPlayer::unmute();
-        
+
         if (new_state == PState::FadeIn) {
             // Start fade-in timer
             arm_fade_timer(CFG.fade_in);
@@ -258,6 +263,12 @@ void change_playing_state(PState new_state, bool force)
         else {
             VolumeShift = 0; // instant on
         }
+
+        if (p_state == PState::NotPlaying) {
+            // avoid unmuting multiple times
+            AudioPlayer::unmute(); // release state-related mute lock
+        }
+
     }
     else if (new_state == PState::FadeOut) {
         // keep USB on during fade out, but not led
@@ -292,7 +303,7 @@ bool main() {
         }
 
         PlaybackCommand command = PlaybackCommand::KeepPlaying;
-        
+
         if (!AudioPlayer::play_file(current_file, command)) {
             // Error playing file, skip to next
             command = PlaybackCommand::NextTrack;

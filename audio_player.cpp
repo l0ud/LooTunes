@@ -40,6 +40,7 @@ namespace {
     volatile bool half_transfer = false;
     volatile bool transfer_complete = false;
     volatile PlaybackCommand playback_command = PlaybackCommand::KeepPlaying;
+    volatile uint32_t mute_ref = 0;
 }
 
 // =============================================================================
@@ -93,7 +94,6 @@ void init_dma() {
     DMA1_Channel1->CCR = 0;
     DMA1_Channel1->CNDTR = CHANNEL_FULL_BUFFER;
     DMA1_Channel1->CPAR = (uint32_t)&TIM1->CCR2;
-    DMA1_Channel1->CMAR = (uint32_t)pcml;
 
     const uint32_t ccr1 = DMA_CCR_MINC |      // Memory increment mode
                             DMA_CCR_DIR |     // Memory-to-peripheral direction
@@ -108,7 +108,6 @@ void init_dma() {
     DMA1_Channel2->CCR &= ~DMA_CCR_EN;
     DMA1_Channel2->CNDTR = CHANNEL_FULL_BUFFER;
     DMA1_Channel2->CPAR = (uint32_t)&TIM1->CCR3;
-    DMA1_Channel2->CMAR = (uint32_t)pcmr;
 
     const uint32_t ccr2 = DMA_CCR_MINC |      // Memory increment mode
                             DMA_CCR_DIR |     // Memory-to-peripheral direction
@@ -117,28 +116,42 @@ void init_dma() {
                             DMA_CCR_CIRC |    // Circular mode
                             DMA_CCR_EN;       // Enable channel
 
-    // Enable DMA channels and interrupt
-    NVIC_EnableIRQ(DMA1_Channel1_IRQn);
+    // Enable DMA channels but not interrupt
+    DMA1_Channel1->CMAR = (uint32_t)silence.data();
+    DMA1_Channel2->CMAR = (uint32_t)silence.data();
+
     DMA1_Channel1->CCR = ccr1;
     DMA1_Channel2->CCR = ccr2;
 }
 
 void init() {
     init_dma();
+    mute(); // by default muted, this lock will be released just before playback
     init_timer();
 }
 
 // =============================================================================
 // Playback Control
 // =============================================================================
-
 void mute() {
+    if (mute_ref++ > 0) {
+        return; // already muted
+    }
     NVIC_DisableIRQ(DMA1_Channel1_IRQn);
     DMA1_Channel1->CMAR = (uint32_t)silence.data();
     DMA1_Channel2->CMAR = (uint32_t)silence.data();
 }
 
+void reset_mute() {
+    mute_ref = 0;
+    mute(); // final ref = 1, this represents playback mute lock (no file is played at the beginning)
+    // note: state mute lock (forced off/light low) is applied later, on state change in controller
+}
+
 void unmute() {
+    if (mute_ref == 0 || --mute_ref > 0) {
+        return; // still muted
+    }
     NVIC_EnableIRQ(DMA1_Channel1_IRQn);
     DMA1_Channel1->CMAR = (uint32_t)pcml;
     DMA1_Channel2->CMAR = (uint32_t)pcmr;
@@ -172,9 +185,9 @@ bool play_file(FILINFO *file, PlaybackCommand &command) {
 
     int pos = 0;
 
-    unmute();
-
     playback_command = PlaybackCommand::KeepPlaying; // Reset command
+
+    unmute();
 
     do {
         WDT::feed();
@@ -221,7 +234,7 @@ bool play_file(FILINFO *file, PlaybackCommand &command) {
     while(playback_command == PlaybackCommand::KeepPlaying && freadwrap(data, SBC_PROBE_SIZE) >= 1 && sbc_probe(data, &frame) == 0);
     
     mute();
-    
+
     command = playback_command;
     return true;
 }

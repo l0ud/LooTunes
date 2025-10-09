@@ -46,6 +46,11 @@ void mute();
 void unmute();
 
 /**
+ * @brief Reset mute reference counter (for use after SD card re-initialization)
+ */
+void reset_mute();
+
+/**
  * @brief Play a single audio file
  * @param file Pointer to FILINFO structure of file to play
  * @param[out] command Playback command requested during playback
