@@ -48,13 +48,11 @@ namespace {
 // =============================================================================
 
 void __attribute__ ((noinline)) handle_state_save_during_playback() {
-    mute();
     // Save PetitFat state to avoid losing track of currently played file
     FATFS petit_state;
     pf_save_state(&petit_state);
     FileNavigator::handle_state_save();
     pf_restore_state(&petit_state);
-    unmute();
 }
 
 // =============================================================================
@@ -157,6 +155,10 @@ void unmute() {
     DMA1_Channel2->CMAR = (uint32_t)pcmr;
 }
 
+bool muted() {
+    return mute_ref > 0;
+}
+
 // =============================================================================
 // File Playback
 // =============================================================================
@@ -213,7 +215,7 @@ bool play_file(FILINFO *file, PlaybackCommand &command) {
         if (left_part && pos >= CHANNEL_HALF_BUFFER) {
             // wait for transfer complete
             while (!transfer_complete) {
-                if (FileNavigator::is_state_save_requested()) {
+                if (muted() && FileNavigator::is_state_save_requested()) {
                     handle_state_save_during_playback();
                 }
             };
@@ -223,7 +225,7 @@ bool play_file(FILINFO *file, PlaybackCommand &command) {
         if (pos >= CHANNEL_FULL_BUFFER) {
             // wait for half transfer
             while (!half_transfer) {
-                if (FileNavigator::is_state_save_requested()) {
+                if (muted() && FileNavigator::is_state_save_requested()) {
                     handle_state_save_during_playback();
                 }
             };

@@ -335,7 +335,10 @@ bool main() {
         }
 
         // save state
-        if (CFG.saving_enabled(Config::SaveState::SaveTrack) || (CFG.saving_enabled(Config::SaveState::SaveDirectory) && next_directory)) {
+        if (FileNavigator::is_state_save_requested()
+            || CFG.saving_enabled(Config::SaveState::SaveTrack)
+            || (CFG.saving_enabled(Config::SaveState::SaveDirectory) && next_directory)) {
+
             FileNavigator::handle_state_save();
         }
     }
