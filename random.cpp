@@ -10,7 +10,6 @@
 #include "light_sensor.h"
 
 extern "C" {
-#include "defines.h"
 #include "py32f0xx.h"
 #include "py32f0xx_hal.h"
 }

@@ -6,7 +6,6 @@
 */
 
 #include "button.h"
-#include "defines.h"
 
 extern "C" {
 #include "py32f0xx.h"

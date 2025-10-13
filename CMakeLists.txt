@@ -74,6 +74,8 @@ target_link_options(${EXECUTABLE} PRIVATE
         -Wl,--gc-sections
         )
 
+add_definitions(-DINPUT_FREQUENCY=48000000)
+
 # Print executable size
 add_custom_command(TARGET ${EXECUTABLE}
         POST_BUILD

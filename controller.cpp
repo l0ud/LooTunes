@@ -14,8 +14,6 @@
 #include "playback_state.h"
 
 extern "C" {
-    #include "defines.h"
-
     volatile uint8_t VolumeShift = 0;
 }
 

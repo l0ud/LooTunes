@@ -13,9 +13,7 @@
 #include "feistel.h"
 #include "gpio.h"
 
-extern "C" {
-    #include "defines.h"
-}
+
 
 namespace FileNavigator {
 
