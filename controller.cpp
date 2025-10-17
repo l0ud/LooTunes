@@ -28,10 +28,6 @@ void LightSensorCallback(uint16_t value) {
 
 namespace Controller {
 
-// =============================================================================
-// Internal Types and Enums
-// =============================================================================
-
 using AudioPlayer::PlaybackCommand;
 
 enum class PState {
@@ -42,10 +38,6 @@ enum class PState {
     Playing,
 };
 
-// =============================================================================
-// Forward Declarations
-// =============================================================================
-
 void change_main_state(PlaybackState::Mode new_state);
 void change_playing_state(PState new_state, bool force = false);
 void set_thresholds_for_state();
@@ -54,10 +46,6 @@ namespace {
     // Playback state
     PState p_state = PState::NotPlaying;
 }
-
-// =============================================================================
-// Initialization Functions
-// =============================================================================
 
 void init() {
     AudioPlayer::init();
@@ -129,10 +117,6 @@ bool init_sd() {
 
     return true;
 }
-
-// =============================================================================
-// State Management Functions
-// =============================================================================
 
 void set_thresholds_for_state()
 {
@@ -285,9 +269,7 @@ void change_playing_state(PState new_state, bool force)
     p_state = new_state;
 }
 
-// =============================================================================
 // Main Playback Loop
-// =============================================================================
 
 bool main() {
     // list main directory

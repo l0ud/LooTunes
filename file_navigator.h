@@ -13,10 +13,6 @@
 
 namespace FileNavigator {
 
-// =============================================================================
-// Navigation Functions
-// =============================================================================
-
 /**
  * @brief Initialize filesystem and load state
  * @return true if successful, false otherwise

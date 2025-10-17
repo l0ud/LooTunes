@@ -17,16 +17,9 @@
 
 namespace FileNavigator {
 
-// =============================================================================
-// Constants
-// =============================================================================
 
 constexpr const char* StateFileName = "STATE.BIN";
 constexpr const char* ConfigFileName = "CONFIG.INI";
-
-// =============================================================================
-// Internal State
-// =============================================================================
 
 namespace {
     FATFS fs;
@@ -38,10 +31,6 @@ namespace {
     volatile bool save_state_requested = false;
 }
 
-// =============================================================================
-// Helper Functions
-// =============================================================================
-
 uint32_t translate_track_number(uint32_t track) {
     if (CFG.random_mode) {
         return permute(track, nv_state.tracks_in_current_dir, nv_state.rand_key, 3);
@@ -50,10 +39,6 @@ uint32_t translate_track_number(uint32_t track) {
         return track;
     }
 }
-
-// =============================================================================
-// Public API Implementation
-// =============================================================================
 
 bool init() {
     FRESULT res = pf_mount(&fs);

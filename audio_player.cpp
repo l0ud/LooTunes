@@ -18,10 +18,6 @@ extern "C" {
 
 namespace AudioPlayer {
 
-// =============================================================================
-// Constants
-// =============================================================================
-
 // Audio buffer configuration
 constexpr auto CHANNEL_HALF_BUFFER = SBC_MAX_SAMPLES; // 128
 constexpr auto CHANNEL_FULL_BUFFER = CHANNEL_HALF_BUFFER * 2; // 256
@@ -30,10 +26,6 @@ constexpr auto CHANNEL_FULL_BUFFER = CHANNEL_HALF_BUFFER * 2; // 256
 constexpr uint32_t TIM_PERIOD_48KHZ = (250 - 1)*4;   // 192 kHz PWM frequency
 constexpr uint32_t TIM_PERIOD_441KHZ = (272 - 1)*4;  // 176.4 kHz PWM frequency
 constexpr uint32_t REPEAT_COUNT = 0;              // Update every 4 PWM cycles (RCR + 1 = 4)
-
-// =============================================================================
-// Internal State
-// =============================================================================
 
 namespace {
     // Audio buffers
@@ -49,10 +41,6 @@ namespace {
     volatile uint32_t mute_ref = 0;
 }
 
-// =============================================================================
-// Helper Functions
-// =============================================================================
-
 void __attribute__ ((noinline)) handle_state_save_during_playback() {
     // Save PetitFat state to avoid losing track of currently played file
     FATFS petit_state;
@@ -61,9 +49,6 @@ void __attribute__ ((noinline)) handle_state_save_during_playback() {
     pf_restore_state(&petit_state);
 }
 
-// =============================================================================
-// Hardware Initialization
-// =============================================================================
 
 void init_timer() {
     __HAL_RCC_TIM1_CLK_ENABLE();
@@ -134,9 +119,6 @@ void init() {
     init_timer();
 }
 
-// =============================================================================
-// Playback Control
-// =============================================================================
 void mute() {
     if (mute_ref++ > 0) {
         return; // already muted
@@ -164,10 +146,6 @@ void unmute() {
 bool muted() {
     return mute_ref > 0;
 }
-
-// =============================================================================
-// File Playback
-// =============================================================================
 
 bool play_file(FILINFO *file, PlaybackCommand &command) {
     // Open file
@@ -252,10 +230,6 @@ void set_playback_command(PlaybackCommand command) {
 }
 
 } // namespace AudioPlayer
-
-// =============================================================================
-// DMA Interrupt Handler
-// =============================================================================
 
 void DMA1_Channel1_IRQHandler() {
     // Check for DMA1 Channel 1 Transfer Complete Interrupt
