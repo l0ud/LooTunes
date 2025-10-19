@@ -1,0 +1,76 @@
+#include <cstdint>
+
+// --- helpers ---
+static inline uint32_t next_power_of_two(uint32_t n) {
+    if (n <= 1u) return 1u;
+    n--;
+    n |= n >> 1;
+    n |= n >> 2;
+    n |= n >> 4;
+    n |= n >> 8;
+    n |= n >> 16;
+    return n + 1;
+}
+
+static inline unsigned ilog2_uint32(uint32_t x) {
+    // assumes x is a power of two > 0
+    unsigned r = 0;
+    while (x > 1u) { x >>= 1; ++r; }
+    return r;
+}
+
+// --- simple round function (fast, not cryptographic, but mixes bits well) ---
+static inline uint32_t round_function(uint32_t v, uint32_t rk) {
+    uint32_t z = v + rk;
+    z ^= z >> 16;
+    z *= 0x7FEB352Du;
+    z ^= z >> 15;
+    z *= 0x846CA68Bu;
+    z ^= z >> 16;
+    return z;
+}
+
+// --- Feistel on r bits (1 <= r <= 32) ---
+static inline uint32_t feistel_rbits(uint32_t x, unsigned r, uint32_t key, int rounds = 3) {
+    // initial split
+    unsigned Lbits = r / 2u;
+    unsigned Rbits = r - Lbits;
+    uint32_t maskL = (Lbits == 32 ? 0xFFFFFFFFu : ((1u << Lbits) - 1u));
+    uint32_t maskR = (Rbits == 32 ? 0xFFFFFFFFu : ((1u << Rbits) - 1u));
+
+    uint32_t L = (x >> Rbits) & maskL;
+    uint32_t R = x & maskR;
+
+    for (int round = 0; round < rounds; ++round) {
+        maskL = (Lbits == 32 ? 0xFFFFFFFFu : ((1u << Lbits) - 1u));
+        maskR = (Rbits == 32 ? 0xFFFFFFFFu : ((1u << Rbits) - 1u));
+
+        uint32_t F = round_function(R, key ^ (uint32_t)(round * 0x9E3779B1u)) & maskL;
+        uint32_t newL = R & maskR;
+        uint32_t newR = (L ^ F) & maskL;
+
+        // swap halves
+        L = newL;
+        R = newR;
+        unsigned tmp = Lbits; Lbits = Rbits; Rbits = tmp;
+    }
+
+    uint32_t result = (L << Rbits) | R;
+    if (r < 32) result &= ((1u << r) - 1u);
+    return result;
+}
+
+// --- permutation 0..N-1 using cycle-walking ---
+uint32_t permute(uint32_t x, uint32_t N, uint32_t key, int rounds) {
+    if (N == 1u) return 0u;
+
+    uint32_t M = next_power_of_two(N);
+    unsigned r = ilog2_uint32(M);
+
+    uint32_t y = x;
+    do {
+        y = feistel_rbits(y, r, key, rounds);
+    } while (y >= N);
+
+    return y;
+}

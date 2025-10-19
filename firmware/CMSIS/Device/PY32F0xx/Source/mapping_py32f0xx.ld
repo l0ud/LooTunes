@@ -50,13 +50,13 @@
 */
 
 /* Entry Point */
-ENTRY(Reset_Handler)
+ENTRY(Pre_Reset_Handler)
 
 /* Highest address of the user mode stack */
 _estack = ORIGIN(RAM) + LENGTH(RAM) - 8;	/* end of "RAM" Ram type memory */
 
-_Min_Heap_Size = 0x200 ;	/* required amount of heap  */
-_Min_Stack_Size = 0x400 ;	/* required amount of stack */
+_Min_Heap_Size = 0 ;	/* required amount of heap  */
+_Min_Stack_Size = 0x590 ;	/* required amount of stack */
 
 /* Memories definition */
 MEMORY
