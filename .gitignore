@@ -1,3 +1,5 @@
 build/
 misc/
+hardware/prod/
+hardware/FxLooTunes-backups/
 .vscode/settings.json

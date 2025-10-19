@@ -1,0 +1,6 @@
+(sym_lib_table
+  (version 7)
+  (lib (name "Puya")(type "KiCad")(uri "${KIPRJMOD}/Puya.kicad_sym")(options "")(descr ""))
+  (lib (name "easyeda2kicad")(type "KiCad")(uri "${KIPRJMOD}/easyeda2kicad.kicad_sym")(options "")(descr ""))
+  (lib (name "FxDev")(type "KiCad")(uri "${KIPRJMOD}/FxDev.kicad_sym")(options "")(descr ""))
+)
