@@ -4,7 +4,7 @@
         {
             "name": "Cortex Debug",
             "cwd": "${workspaceFolder}",
-            "executable": "${workspaceFolder}/build/puya_playground.out",
+            "executable": "${workspaceFolder}/firmware/build/LooTunes.out",
             "request": "launch",
             "type": "cortex-debug",
             //"breakAfterReset": true,
@@ -19,7 +19,7 @@
             "cwd": "${workspaceFolder}",
             "type": "cortex-debug",
             "request": "launch",
-            "executable": "${workspaceFolder}/build/puya_playground.out",
+            "executable": "${workspaceFolder}/firmware/build/LooTunes.out",
             "servertype": "pyocd",
             "targetId": "PY32F030x6", 
             "svdFile": "CMSIS/Device/PY32F0xx/py32f030xx.svd",

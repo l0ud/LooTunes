@@ -77,5 +77,6 @@
         "stop_token": "cpp",
         "pffconf.h": "c"
     },
-    "cortex-debug.variableUseNaturalFormat": true
+    "cortex-debug.variableUseNaturalFormat": true,
+    "cmake.sourceDirectory": "/home/tailsy/Dokumenty/work/FxToiletLite/firmware"
 }
