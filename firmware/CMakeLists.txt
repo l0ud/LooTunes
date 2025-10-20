@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.15.3)
 
-project(puya_playground)
+project(LooTunes)
 
 enable_language(C CXX ASM)
 set(CMAKE_C_STANDARD 99)

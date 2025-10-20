@@ -78,5 +78,5 @@
         "pffconf.h": "c"
     },
     "cortex-debug.variableUseNaturalFormat": true,
-    "cmake.sourceDirectory": "/home/tailsy/Dokumenty/work/FxToiletLite/firmware"
+    "cmake.sourceDirectory": "/home/tailsy/Dokumenty/work/LooTunes/firmware"
 }
