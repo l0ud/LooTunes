@@ -75,7 +75,6 @@ int main() {
   GPIO::init();
   BTN::init();
   SPI::init();
-  //SPI::dma_map();
   LIGHT::init();
   WDT::feed();
   Controller::init();

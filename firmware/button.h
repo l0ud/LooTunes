@@ -24,9 +24,9 @@ public:
 
 public:
     static void init();
-    static void onExtInterrupt();
-    static void onShortTimerInterrupt();
-    static void onTimerInterrupt();
+    static void on_ext_interrupt();
+    static void on_short_timer_interrupt();
+    static void on_timer_interrupt();
 };
 
 void ButtonPressCallback(BTN::ID button_id);

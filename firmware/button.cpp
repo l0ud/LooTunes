@@ -46,7 +46,7 @@ void BTN::init()
     NVIC_EnableIRQ(EXTI0_1_IRQn);
 }
 
-void BTN::onExtInterrupt() {
+void BTN::on_ext_interrupt() {
 
     // if timer 3 was not enabled
     if (!(TIM3->CR1 & TIM_CR1_CEN)) {
@@ -69,7 +69,7 @@ void BTN::onExtInterrupt() {
     // we're in stable state here so we could check if button was released
     if ((GPIOB->IDR & (GPIO_IDR_ID0 | GPIO_IDR_ID1)) == (GPIO_IDR_ID0 | GPIO_IDR_ID1)) {
         // button was released, short press
-        ButtonPressCallback(g_btn_pressed & GPIO_IDR_ID0 ? ID::POWER : ID::NEXT);
+        ButtonPressCallback(g_btn_pressed & GPIO_IDR_ID0 ? BTN::ID::POWER : BTN::ID::NEXT);
 
         // reset timer so it will reach short timer interrupt again
         TIM3->CNT = 0;
@@ -79,29 +79,29 @@ void BTN::onExtInterrupt() {
     // so nothing to do here
 }
 
-void BTN::onShortTimerInterrupt() {
+void BTN::on_short_timer_interrupt() {
     // if no button is not pressed after bouncing period, stop timer
     if ((GPIOB->IDR & (GPIO_IDR_ID0 | GPIO_IDR_ID1)) == (GPIO_IDR_ID0 | GPIO_IDR_ID1)) {
         TIM3->CR1 &= ~TIM_CR1_CEN;
     }
 }
 
-void BTN::onTimerInterrupt() {
+void BTN::on_timer_interrupt() {
     // button was held for 1 second
     // check if button is still pressed reading port
     if ((GPIOB->IDR & GPIO_IDR_ID0) == 0) {
         // button is still pressed, long press
-        ButtonPressCallback(ID::PREV);
+        ButtonPressCallback(BTN::ID::PREV);
     }
     if ((GPIOB->IDR & GPIO_IDR_ID1) == 0) {
         // button 2 is still pressed, long press
-        ButtonPressCallback(ID::NEXT_DIR);
+        ButtonPressCallback(BTN::ID::NEXT_DIR);
     }
 }
 
 void EXTI0_1_IRQHandler(void)
 {
-    BTN::onExtInterrupt();
+    BTN::on_ext_interrupt();
     // button pressed
     EXTI->PR |= EXTI_PR_PR0 | EXTI_PR_PR1; // clear pending interrupt
 }
@@ -109,12 +109,12 @@ void EXTI0_1_IRQHandler(void)
 void TIM3_IRQHandler(void)
 {
     if (TIM3->SR & TIM_SR_CC1IF) {
-        BTN::onShortTimerInterrupt();
+        BTN::on_short_timer_interrupt();
         TIM3->SR &= ~TIM_SR_CC1IF; // clear interrupt flag
     }
 
     if (TIM3->SR & TIM_SR_UIF) {
-        BTN::onTimerInterrupt();
+        BTN::on_timer_interrupt();
         TIM3->SR &= ~TIM_SR_UIF;
     }
 }
