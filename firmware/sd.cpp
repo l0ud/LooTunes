@@ -19,6 +19,7 @@ namespace {
     DWORD sdCachedSector = NO_SECTOR;
     DWORD sdRequestedSector = NO_SECTOR;
     bool sdMultiTransfer = false;
+    bool extendedCapacity = false;
 }
 
 
@@ -50,7 +51,11 @@ void make_empty_traffic() {
 DRESULT sd_request_sector(DWORD sector) {
     SPI::begin();
     SD::cs_set();
-    if (SD::send_command(17, sector, 0x01) != 0x00) { // CMD17 to read a single block
+    
+    // Convert sector to address: SDHC/SDXC use block addressing, SDSC uses byte addressing
+    const DWORD address = extendedCapacity ? sector : sector * 512;
+    
+    if (SD::send_command(17, address, 0x01) != 0x00) { // CMD17 to read a single block
         // command failed
         SD::cs_reset();
         SPI::end();
@@ -65,7 +70,10 @@ DRESULT sd_request_sector(DWORD sector) {
 DRESULT sd_start_sector_stream(DWORD starting_sector) {
     SPI::begin();
     SD::cs_set();
-    if (SD::send_command(18, starting_sector, 0x01) != 0x00) { // CMD18 to read multiple blocks
+    
+    const DWORD address = extendedCapacity ? starting_sector : starting_sector * 512;
+    
+    if (SD::send_command(18, address, 0x01) != 0x00) { // CMD18 to read multiple blocks
         // command failed
         SD::cs_reset();
         SPI::end();
@@ -207,12 +215,14 @@ DRESULT disk_writep (
     // Initiate write (buff == NULL, sc > 0): Send CMD24 and the data-start token (0xFE)
     if (!buff) {
         if (sc) {
-            // Start single-block write to LBA = sc (SDHC uses LBA directly)
+            // Start single-block write
             SPI::begin();
             SD::cs_set();
 
+            const DWORD address = extendedCapacity ? sc : sc * 512;
+
             // CMD24 (WRITE_BLOCK)
-            if (SD::send_command(24, sc, 0x01) != 0x00) {
+            if (SD::send_command(24, address, 0x01) != 0x00) {
                 SD::cs_reset();
                 make_empty_traffic();
                 SPI::end();
@@ -323,6 +333,8 @@ bool SD::init() {
     sdCachedSector = NO_SECTOR;
     sdRequestedSector = NO_SECTOR;
     sdMultiTransfer = false;
+    extendedCapacity = false;
+    uint8_t hcs = 0x01;
 
     volatile uint8_t response;
     SPI::speed_mode(false); // slow SPI
@@ -374,7 +386,8 @@ bool SD::init() {
     } while(--retries);
 
     if (retries == 0) {
-        return false; // Card did not respond to CMD8 correctly, we don't support non-sdhc cards anyway
+        // Card did not respond to CMD8 correctly
+        hcs = 0;
     }
 
     // Step 4: Send ACMD41 repeatedly until the card exits idle state
@@ -397,13 +410,17 @@ bool SD::init() {
 
     // Step 5: Send CMD58 (READ_OCR) to read OCR register
     cs_set();
-    response = send_command(58, 0, 0x01); // CMD58, no argument, CRC ignored
+    response = send_command(58, 0, hcs); // CMD58, no argument, CRC ignored
     if (response != 0x00) {
         cs_reset();
         return false; // Failed to read OCR register
     }
     uint8_t ocr[4];
     SPI::raw_read(ocr, sizeof(ocr));
+
+    // Check CCS bit (bit 30) in OCR register to detect SDHC/SDXC cards
+    // OCR[0] contains bits 31-24, so bit 30 is bit 6 of OCR[0]
+    extendedCapacity = hcs && (ocr[0] & 0x40) != 0;
 
     // try to release bus
     SPI::raw_byte_read();
