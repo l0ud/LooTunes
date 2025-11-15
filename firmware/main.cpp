@@ -14,7 +14,6 @@ extern "C" {
 #include "sd.h"
 #include "button.h"
 #include "controller.h"
-#include "watchdog.h"
 #include "light_sensor.h"
 #include "random.h"
 
@@ -70,13 +69,11 @@ int main() {
   HAL_SuspendTick();
   RAND::init();
   SystemClock_Config();
-  //WDT::init();
 
   GPIO::init();
   BTN::init();
   SPI::init();
   LIGHT::init();
-  WDT::feed();
   Controller::init();
   
   while(1) {

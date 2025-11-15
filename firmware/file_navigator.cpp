@@ -9,7 +9,6 @@
 #include "petitfat/source/pff.h"
 #include "playback_state.h"
 #include "config.h"
-#include "watchdog.h"
 #include "feistel.h"
 #include "gpio.h"
 
@@ -42,7 +41,6 @@ uint32_t translate_track_number(uint32_t track) {
 
 bool init() {
     FRESULT res = pf_mount(&fs);
-    WDT::feed();
     
     if (res != FR_OK) {
         return false;

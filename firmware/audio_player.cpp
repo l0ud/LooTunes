@@ -7,7 +7,6 @@
 
 #include "audio_player.h"
 #include "libsbc/include/sbc.h"
-#include "watchdog.h"
 #include "utility.h"
 #include "file_navigator.h"
 
@@ -176,7 +175,6 @@ bool play_file(FILINFO *file, PlaybackCommand &command) {
     unmute();
 
     do {
-        WDT::feed();
         if (freadwrap(data + SBC_PROBE_SIZE,
                 sbc_get_frame_size(&frame) - SBC_PROBE_SIZE) < 1) {
             break;

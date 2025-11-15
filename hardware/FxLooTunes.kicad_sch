@@ -4,6 +4,10 @@
 	(generator_version "9.0")
 	(uuid "97c1ba9b-17a9-4b43-8bd2-d73582c7b037")
 	(paper "A4")
+	(title_block
+		(title "LooTunes")
+		(company "FxDev.pl")
+	)
 	(lib_symbols
 		(symbol "Connector:Conn_01x04_Socket"
 			(pin_names
@@ -2796,21 +2800,19 @@
 			(in_bom yes)
 			(on_board yes)
 			(property "Reference" "R"
-				(at 0.762 0.508 0)
+				(at 0 0 90)
 				(effects
 					(font
-						(size 1.27 1.27)
+						(size 1.016 1.016)
 					)
-					(justify left)
 				)
 			)
 			(property "Value" "R_Small"
-				(at 0.762 -1.016 0)
+				(at 1.778 0 90)
 				(effects
 					(font
 						(size 1.27 1.27)
 					)
-					(justify left)
 				)
 			)
 			(property "Footprint" ""
@@ -3137,7 +3139,7 @@
 				(offset 0)
 				(hide yes)
 			)
-			(exclude_from_sim yes)
+			(exclude_from_sim no)
 			(in_bom no)
 			(on_board yes)
 			(property "Reference" "JP"
@@ -4048,6 +4050,7 @@
 		)
 		(symbol "Transistor_FET:2N7002"
 			(pin_names
+				(offset 0)
 				(hide yes)
 			)
 			(exclude_from_sim no)
@@ -4083,7 +4086,7 @@
 				)
 			)
 			(property "Datasheet" "https://www.onsemi.com/pub/Collateral/NDS7002A-D.PDF"
-				(at 0 0 0)
+				(at 5.08 -3.81 0)
 				(effects
 					(font
 						(size 1.27 1.27)
@@ -4263,7 +4266,7 @@
 				)
 				(polyline
 					(pts
-						(xy 2.794 0.508) (xy 2.921 0.381) (xy 3.683 0.381) (xy 3.81 0.254)
+						(xy 2.921 0.381) (xy 3.683 0.381)
 					)
 					(stroke
 						(width 0)
@@ -4381,7 +4384,7 @@
 				)
 			)
 			(property "Datasheet" "http://www.vishay.com/docs/66709/si2319cd.pdf"
-				(at 0 0 0)
+				(at 5.08 -3.81 0)
 				(effects
 					(font
 						(size 1.27 1.27)
@@ -5219,131 +5222,6 @@
 			)
 			(embedded_fonts no)
 		)
-		(symbol "power:VBUS"
-			(power)
-			(pin_numbers
-				(hide yes)
-			)
-			(pin_names
-				(offset 0)
-				(hide yes)
-			)
-			(exclude_from_sim no)
-			(in_bom yes)
-			(on_board yes)
-			(property "Reference" "#PWR"
-				(at 0 -3.81 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(hide yes)
-				)
-			)
-			(property "Value" "VBUS"
-				(at 0 3.556 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-				)
-			)
-			(property "Footprint" ""
-				(at 0 0 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(hide yes)
-				)
-			)
-			(property "Datasheet" ""
-				(at 0 0 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(hide yes)
-				)
-			)
-			(property "Description" "Power symbol creates a global label with name \"VBUS\""
-				(at 0 0 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(hide yes)
-				)
-			)
-			(property "ki_keywords" "global power"
-				(at 0 0 0)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-					(hide yes)
-				)
-			)
-			(symbol "VBUS_0_1"
-				(polyline
-					(pts
-						(xy -0.762 1.27) (xy 0 2.54)
-					)
-					(stroke
-						(width 0)
-						(type default)
-					)
-					(fill
-						(type none)
-					)
-				)
-				(polyline
-					(pts
-						(xy 0 2.54) (xy 0.762 1.27)
-					)
-					(stroke
-						(width 0)
-						(type default)
-					)
-					(fill
-						(type none)
-					)
-				)
-				(polyline
-					(pts
-						(xy 0 0) (xy 0 2.54)
-					)
-					(stroke
-						(width 0)
-						(type default)
-					)
-					(fill
-						(type none)
-					)
-				)
-			)
-			(symbol "VBUS_1_1"
-				(pin power_in line
-					(at 0 0 90)
-					(length 0)
-					(name "~"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-					(number "1"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-				)
-			)
-			(embedded_fonts no)
-		)
 	)
 	(text_box "LDO"
 		(exclude_from_sim no)
@@ -5590,6 +5468,12 @@
 		(uuid "d3bdc6f2-7e8b-4a09-9795-9fcec44e87ef")
 	)
 	(junction
+		(at 26.67 82.55)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "d5b8edb7-e5ed-475d-9574-57adac4e42d7")
+	)
+	(junction
 		(at 232.41 87.63)
 		(diameter 0)
 		(color 0 0 0 0)
@@ -5642,12 +5526,6 @@
 		(diameter 0)
 		(color 0 0 0 0)
 		(uuid "f8149b0a-7247-4151-a3ea-565af81f8040")
-	)
-	(junction
-		(at 62.23 43.18)
-		(diameter 0)
-		(color 0 0 0 0)
-		(uuid "fbcd6703-e50e-4d84-adf9-4a8885e901b6")
 	)
 	(no_connect
 		(at 146.05 69.85)
@@ -6363,6 +6241,16 @@
 	)
 	(wire
 		(pts
+			(xy 24.13 82.55) (xy 26.67 82.55)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "56fced6a-d454-4a40-af4d-1a5f76991dbf")
+	)
+	(wire
+		(pts
 			(xy 248.92 130.81) (xy 254 130.81)
 		)
 		(stroke
@@ -6613,16 +6501,6 @@
 	)
 	(wire
 		(pts
-			(xy 62.23 43.18) (xy 62.23 38.1)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "73e82f51-83b7-42b9-99bc-274f7c1ef815")
-	)
-	(wire
-		(pts
 			(xy 198.12 96.52) (xy 198.12 102.87)
 		)
 		(stroke
@@ -6673,7 +6551,7 @@
 	)
 	(wire
 		(pts
-			(xy 58.42 43.18) (xy 62.23 43.18)
+			(xy 58.42 43.18) (xy 67.31 43.18)
 		)
 		(stroke
 			(width 0)
@@ -7060,16 +6938,6 @@
 			(type default)
 		)
 		(uuid "b8419428-3da9-4b86-84ca-ae9abcb20c79")
-	)
-	(wire
-		(pts
-			(xy 62.23 43.18) (xy 67.31 43.18)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "b8fa4816-6149-42a3-ae1d-10b8d9139481")
 	)
 	(wire
 		(pts
@@ -8336,7 +8204,7 @@
 				(justify left)
 			)
 		)
-		(property "Value" "R_Photo"
+		(property "Value" "GL5516"
 			(at 181.61 74.9299 0)
 			(effects
 				(font
@@ -8804,7 +8672,7 @@
 				)
 			)
 		)
-		(property "Value" "AudioJack4"
+		(property "Value" "PJ-322"
 			(at 261.62 142.24 0)
 			(effects
 				(font
@@ -9076,7 +8944,7 @@
 				)
 			)
 		)
-		(property "Value" "2k"
+		(property "Value" "1k"
 			(at 165.1 87.884 90)
 			(effects
 				(font
@@ -9393,7 +9261,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "Unpolarized capacitor, small symbol"
 			(at 213.36 147.32 0)
 			(effects
 				(font
@@ -9462,7 +9330,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "Unpolarized capacitor, small symbol"
 			(at 99.06 110.49 0)
 			(effects
 				(font
@@ -9552,6 +9420,71 @@
 		)
 	)
 	(symbol
+		(lib_id "power:PWR_FLAG")
+		(at 24.13 82.55 90)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "2c7a40da-e4de-427b-82f9-cb52b991139b")
+		(property "Reference" "#U04"
+			(at 22.225 82.55 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Value" "PWR_FLAG"
+			(at 22.352 89.154 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 24.13 82.55 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" "~"
+			(at 24.13 82.55 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" "Special symbol for telling ERC where power comes from"
+			(at 24.13 82.55 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(pin "1"
+			(uuid "d168a8dd-1158-43f9-adf3-6483c645eb30")
+		)
+		(instances
+			(project "FxLooTunes"
+				(path "/97c1ba9b-17a9-4b43-8bd2-d73582c7b037"
+					(reference "#U04")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
 		(lib_id "power:GND")
 		(at 99.06 115.57 0)
 		(unit 1)
@@ -9595,7 +9528,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "Power symbol creates a global label with name \"GND\" , ground"
 			(at 99.06 115.57 0)
 			(effects
 				(font
@@ -9732,7 +9665,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "-4.4A Id, -40V Vds, P-Channel MOSFET, SOT-23"
 			(at 77.47 95.25 0)
 			(effects
 				(font
@@ -9915,8 +9848,8 @@
 				(justify right)
 			)
 		)
-		(property "Value" "100nF"
-			(at 144.272 151.384 0)
+		(property "Value" "10uF"
+			(at 143.51 151.384 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -9942,7 +9875,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "Unpolarized capacitor, small symbol"
 			(at 135.89 149.86 0)
 			(effects
 				(font
@@ -9985,7 +9918,7 @@
 				(justify left)
 			)
 		)
-		(property "Value" "FerriteBead_Small"
+		(property "Value" "50mΩ 120Ω@100MHz FB"
 			(at 209.55 40.6018 0)
 			(effects
 				(font
@@ -10146,7 +10079,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "Unpolarized capacitor, small symbol"
 			(at 213.36 130.81 0)
 			(effects
 				(font
@@ -10318,8 +10251,8 @@
 				(justify right)
 			)
 		)
-		(property "Value" "10uF"
-			(at 154.686 151.13 0)
+		(property "Value" "100nF"
+			(at 155.194 151.13 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -10345,7 +10278,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "Unpolarized capacitor, small symbol"
 			(at 147.32 149.86 0)
 			(effects
 				(font
@@ -10481,7 +10414,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "Resistor, small symbol"
 			(at 57.15 48.26 0)
 			(effects
 				(font
@@ -10662,7 +10595,7 @@
 				(justify left)
 			)
 		)
-		(property "Value" "Polyfuse_Small"
+		(property "Value" "500mA Polyfuse"
 			(at 63.246 44.704 0)
 			(effects
 				(font
@@ -10824,7 +10757,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "Resistor, small symbol"
 			(at 64.77 95.25 0)
 			(effects
 				(font
@@ -10893,7 +10826,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "Resistor, small symbol"
 			(at 49.53 106.68 0)
 			(effects
 				(font
@@ -11040,7 +10973,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "Special symbol for telling ERC where power comes from"
 			(at 83.82 104.14 0)
 			(effects
 				(font
@@ -11228,7 +11161,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "Resistor, small symbol"
 			(at 45.72 102.87 0)
 			(effects
 				(font
@@ -11730,7 +11663,7 @@
 				(justify left)
 			)
 		)
-		(property "Value" "FerriteBead_Small"
+		(property "Value" "50mΩ 120Ω@100MHz FB"
 			(at 191.77 86.868 0)
 			(effects
 				(font
@@ -12023,7 +11956,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "Power symbol creates a global label with name \"GND\" , ground"
 			(at 30.48 85.09 0)
 			(effects
 				(font
@@ -12350,7 +12283,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "USB Type A connector"
 			(at 68.58 111.76 0)
 			(effects
 				(font
@@ -12427,7 +12360,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "Special symbol for telling ERC where power comes from"
 			(at 64.77 31.75 0)
 			(effects
 				(font
@@ -12719,7 +12652,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "Resistor, small symbol"
 			(at 71.12 91.44 0)
 			(effects
 				(font
@@ -12788,7 +12721,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "Unpolarized capacitor, small symbol"
 			(at 234.95 143.51 0)
 			(effects
 				(font
@@ -13124,7 +13057,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "Resistor, small symbol"
 			(at 57.15 50.8 0)
 			(effects
 				(font
@@ -13192,7 +13125,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "Power symbol creates a global label with name \"GND\" , ground"
 			(at 66.04 124.46 0)
 			(effects
 				(font
@@ -13257,7 +13190,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "Power symbol creates a global label with name \"GND\" , ground"
 			(at 58.42 113.03 0)
 			(effects
 				(font
@@ -13349,71 +13282,6 @@
 		)
 	)
 	(symbol
-		(lib_id "power:VBUS")
-		(at 62.23 38.1 0)
-		(unit 1)
-		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
-		(dnp no)
-		(uuid "c1717254-a334-40e2-b76e-7d2e615beeae")
-		(property "Reference" "#PWR04"
-			(at 62.23 41.91 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "Value" "VBUS"
-			(at 62.23 34.036 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Footprint" ""
-			(at 62.23 38.1 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "Datasheet" ""
-			(at 62.23 38.1 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "Description" "Power symbol creates a global label with name \"VBUS\""
-			(at 62.23 38.1 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(pin "1"
-			(uuid "42086138-df8a-42a3-8f0d-a052e64ac01a")
-		)
-		(instances
-			(project "FxLooTunes"
-				(path "/97c1ba9b-17a9-4b43-8bd2-d73582c7b037"
-					(reference "#PWR04")
-					(unit 1)
-				)
-			)
-		)
-	)
-	(symbol
 		(lib_id "power:PWR_FLAG")
 		(at 198.12 96.52 0)
 		(unit 1)
@@ -13457,7 +13325,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "Special symbol for telling ERC where power comes from"
 			(at 198.12 96.52 0)
 			(effects
 				(font
@@ -13593,7 +13461,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "Unpolarized capacitor, small symbol"
 			(at 200.66 54.61 0)
 			(effects
 				(font
@@ -13661,7 +13529,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "Power symbol creates a global label with name \"GND\" , ground"
 			(at 62.23 54.61 0)
 			(effects
 				(font
@@ -14778,7 +14646,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "Unpolarized capacitor, small symbol"
 			(at 195.58 54.61 0)
 			(effects
 				(font
@@ -14850,7 +14718,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "0.115A Id, 60V Vds, N-Channel MOSFET, SOT-23"
 			(at 55.88 102.87 0)
 			(effects
 				(font
@@ -15185,7 +15053,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" ""
+		(property "Description" "Unpolarized capacitor, small symbol"
 			(at 234.95 127 0)
 			(effects
 				(font

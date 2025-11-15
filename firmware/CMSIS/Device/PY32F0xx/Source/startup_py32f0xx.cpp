@@ -1,6 +1,6 @@
 /**
- * @file      startup_stm32g071k8tx.c
- * @brief     STM32G071 Devices vector table for GCC toolchain.
+ * @file      startup_py32f0xx.c
+ * @brief     PY32 Devices vector table for GCC toolchain.
  *            This module performs:
  *                - Set the initial SP
  *                - Set the initial PC == Reset_Handler,
@@ -26,7 +26,6 @@ extern "C" {
 
 /* Includes ----------------------------------------------------------------------*/
 extern "C" {
-  void WEAK Pre_Reset_Handler(void);            // Address = 0x0000_0004
   void Reset_Handler(void);            // Address = 0x0000_0004
 }
 void WEAK NMI_Handler(void);              // Address = 0x0000_0008
@@ -108,7 +107,7 @@ __attribute__ ((section(".isr_vector")))
 void (* const g_pfnVectors[])(void) __attribute__((used)) =
 {
   (void(*)(void))&_estack,    /* Top of stack address */
-  Pre_Reset_Handler,              /* Reset Handler */
+  Reset_Handler,              /* Reset Handler */
   NMI_Handler,                /* NMI Handler */
   HardFault_Handler,          /* Hard Fault Handler */
   0,                          /* Reserved */

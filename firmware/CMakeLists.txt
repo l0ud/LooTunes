@@ -8,7 +8,6 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_C_EXTENSIONS OFF)
 
 set(PROJECT_FILES
-        CMSIS/Device/PY32F0xx/Source/pre_reset.s
         CMSIS/Device/PY32F0xx/Source/startup_py32f0xx.cpp
         CMSIS/Device/PY32F0xx/Source/system_py32f0xx.c
         CMSIS/Device/PY32F0xx/Source/syscalls.c
