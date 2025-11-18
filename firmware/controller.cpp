@@ -217,7 +217,8 @@ void change_playing_state(PState new_state, bool force)
     }
 
     if (!force) { // make changes soft
-        if (CFG.fade_out != 0 && new_state == PState::NotPlaying) {
+        // do not fade out when device was just initialized (invalid state)
+        if (p_state != PState::Invalid && CFG.fade_out != 0 && new_state == PState::NotPlaying) {
             // fade out
             new_state = PState::FadeOut;
         }
